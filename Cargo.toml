@@ -1,0 +1,34 @@
+[package]
+name = "dprint-plugin-incopat"
+version = "0.1.0"
+authors = ["clinku"]
+edition = "2021"
+license = "MIT"
+description = "incoPat patent search query formatter plugin for dprint."
+
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+debug-assertions = false
+overflow-checks = false
+panic = "abort"
+
+[features]
+wasm = ["serde_json", "dprint-core/wasm"]
+tracing = ["dprint-core/tracing"]
+
+[dependencies]
+anyhow = "1.0"
+dprint-core = { version = "0.67", features = ["formatting"] }
+dprint-core-macros = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", optional = true }
+unicode-width = "0.2"
+
+[dev-dependencies]
+dprint-development = "0.10"
+serde_json = "1.0"

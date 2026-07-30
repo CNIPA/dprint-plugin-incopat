@@ -1,0 +1,14 @@
+-- /file.incopat --
+== should keep inner binary chain on one line when it fits ==
+ti=(空调 or 蒸发器)
+
+[expect]
+ti = (空调 or 蒸发器)
+
+== should break top-level binary chains ==
+ti=(空调 or "air condition") and ab=(蒸发器 or evaporator) or ipc=H01L
+
+[expect]
+    ti = (空调 or "air condition")
+and ab = (蒸发器 or evaporator)
+ or ipc = H01L

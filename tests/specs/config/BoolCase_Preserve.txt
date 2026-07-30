@@ -1,0 +1,8 @@
+-- /file.incopat --
+~~ booleanOperatorCase: preserve ~~
+== should preserve boolean operator case ==
+ti=空调 AND ab=蒸发器
+
+[expect]
+    ti = 空调
+AND ab = 蒸发器

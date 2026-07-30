@@ -1,0 +1,19 @@
+-- /file.incopat --
+== should format TREE@ expression ==
+AP=(TREE@"清华大学")
+
+[expect]
+ap = (TREE@"清华大学")
+
+== should lowercase field codes by default ==
+TI=测试 AND AB=数据
+
+[expect]
+    ti = 测试
+and ab = 数据
+
+== should recognize TIAB compound field ==
+TIAB=(测试 or 数据)
+
+[expect]
+tiab = (测试 or 数据)

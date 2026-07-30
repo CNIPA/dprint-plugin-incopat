@@ -1,0 +1,28 @@
+-- /file.incopat --
+== should preserve line comments ==
+# this is a comment
+ti=test
+
+[expect]
+# this is a comment
+ti = test
+
+== should preserve blank lines between queries ==
+ti=a
+
+ti=b
+
+[expect]
+ti = a
+
+ti = b
+
+== should preserve comment between queries ==
+ti=a
+# separator
+ti=b
+
+[expect]
+ti = a
+# separator
+ti = b

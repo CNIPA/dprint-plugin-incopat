@@ -1,0 +1,31 @@
+-- /file.incopat --
+== should format R semantic search ==
+R=(CN101850473B)
+
+[expect]
+R = (CN101850473B)
+
+== should format RAD semantic search ==
+RAD=(CN101850473B)
+
+[expect]
+RAD = (CN101850473B)
+
+== should format RPD semantic search ==
+RPD=(CN101850473B)
+
+[expect]
+RPD = (CN101850473B)
+
+== should format semantic search with AND ==
+RAD=(CN101850473B) AND tiab=(发动机)
+
+[expect]
+    RAD = (CN101850473B)
+and tiab = (发动机)
+
+== should format lowercase semantic keyword to uppercase ==
+r=(CN101850473B)
+
+[expect]
+R = (CN101850473B)

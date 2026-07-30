@@ -1,0 +1,17 @@
+{
+  "incopat": {
+    "lineWidth": 120,
+    "indentWidth": 2,
+    "useTabs": false,
+    "fieldCase": "lowercase",
+    "booleanOperatorCase": "lowercase",
+    "quoteStyle": "double",
+    "operatorPosition": "before"
+  },
+  "includes": [
+    "**/*.incopat"
+  ],
+  "excludes": [
+    "target"
+  ]
+}

@@ -1,0 +1,36 @@
+-- /file.incopat --
+== should format proximity operator (w) ==
+data (2w) line
+
+[expect]
+data (2w) line
+
+== should format proximity operator (n) ==
+data (3n) line
+
+[expect]
+data (3n) line
+
+== should format proximity operator (s) ==
+空调 (s) 蒸发器
+
+[expect]
+空调 (s) 蒸发器
+
+== should format proximity operator (p) ==
+空调 (p) 蒸发器
+
+[expect]
+空调 (p) 蒸发器
+
+== should format frequency operator ==
+tiab=("机器人" (3f))
+
+[expect]
+tiab = ("机器人" (3f))
+
+== should format proximity without number ==
+data (w) line
+
+[expect]
+data (w) line

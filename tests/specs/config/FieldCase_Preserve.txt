@@ -1,0 +1,7 @@
+-- /file.incopat --
+~~ fieldCase: preserve ~~
+== should preserve field case ==
+TI=汽车
+
+[expect]
+TI = 汽车

@@ -1,0 +1,60 @@
+-- /file.incopat --
+== should break top-level AND to new lines ==
+TI=空调 and AB=蒸发器
+
+[expect]
+    ti = 空调
+and ab = 蒸发器
+
+== should break top-level OR to new lines ==
+TI=空调 or AB=蒸发器
+
+[expect]
+   ti = 空调
+or ab = 蒸发器
+
+== should break top-level NOT in chain ==
+TI=a not AB=b
+
+[expect]
+    ti = a
+not ab = b
+
+== should flatten three-part chain ==
+TI=a AND AB=b OR IPC=c
+
+[expect]
+    ti = a
+and ab = b
+ or ipc = c
+
+== should break complex real-world query ==
+ti=(空调 or "air condition" or 空气调节) and tiab=(蒸发器 or evaporator)
+
+[expect]
+    ti = (空调 or "air condition" or 空气调节)
+and tiab = (蒸发器 or evaporator)
+
+== should break large chain with multiple operators ==
+TI=a AND AB=b AND IPC=c OR AN=d NOT CPC=e
+
+[expect]
+    ti = a
+and ab = b
+and ipc = c
+ or an = d
+not cpc = e
+
+== should handle nested groups in field body ==
+tiab=(空调 and (蒸发器 or evaporator))
+
+[expect]
+tiab = (空调 and (蒸发器 or evaporator))
+
+== should handle multiline input as single query ==
+TI=a
+and AB=b
+
+[expect]
+    ti = a
+and ab = b

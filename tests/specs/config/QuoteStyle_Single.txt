@@ -1,0 +1,7 @@
+-- /file.incopat --
+~~ quoteStyle: single ~~
+== should use single quotes ==
+ti="air condition"
+
+[expect]
+ti = 'air condition'

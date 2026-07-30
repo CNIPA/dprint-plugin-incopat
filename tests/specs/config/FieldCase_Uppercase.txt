@@ -1,0 +1,7 @@
+-- /file.incopat --
+~~ fieldCase: uppercase ~~
+== should uppercase field codes ==
+ti=汽车
+
+[expect]
+TI = 汽车

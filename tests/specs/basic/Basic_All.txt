@@ -1,0 +1,36 @@
+-- /file.incopat --
+== should format a simple keyword ==
+汽车
+
+[expect]
+汽车
+
+== should format a field with simple value ==
+TI=汽车
+
+[expect]
+ti = 汽车
+
+== should format a field with quoted value ==
+TI="air condition"
+
+[expect]
+ti = "air condition"
+
+== should format a parenthesized field body ==
+TI=(空调 or 蒸发器)
+
+[expect]
+ti = (空调 or 蒸发器)
+
+== should format wildcard keywords ==
+TI=m?tor*
+
+[expect]
+ti = m?tor*
+
+== should format dollar wildcard ==
+TI=comput$
+
+[expect]
+ti = comput$

@@ -1,0 +1,30 @@
+-- /file.incopat --
+== should format bracket range ==
+pd=[20110101 to 20130101]
+
+[expect]
+pd = [20110101 to 20130101]
+
+== should format double-sided comparison range ==
+(20110101<=PD<=20130101)
+
+[expect]
+(20110101<=pd<=20130101)
+
+== should format single-sided comparison range (field first) ==
+(PD>20190101)
+
+[expect]
+(pd>20190101)
+
+== should format single-sided comparison range (value first) ==
+(20190101<=PD)
+
+[expect]
+(20190101<=pd)
+
+== should format field with bracket range ==
+PD=[20200101 to 20241231]
+
+[expect]
+pd = [20200101 to 20241231]
