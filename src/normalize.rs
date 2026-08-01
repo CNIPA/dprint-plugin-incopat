@@ -232,6 +232,30 @@ fn wrap_fragment(expr: QueryExpr) -> QueryExpr {
     }
 }
 
+/// Move a frequency operator that follows a whole field expression into the
+/// field's value: `tiabc = (压缩机) (9f)` becomes `tiabc = ((压缩机) (9f))`.
+fn move_frequency_into_field(fe: &FieldExpr, op: &str, op_span: Span) -> QueryExpr {
+    let body = match &fe.body {
+        FieldBody::Simple(inner) | FieldBody::Parenthesized { inner, .. } => {
+            FieldBody::Parenthesized {
+                lparen_span: Span::new(0, 0),
+                inner: Box::new(QueryExpr::Frequency(FrequencyExpr {
+                    operand: inner.clone(),
+                    op: op.to_string(),
+                    op_span,
+                })),
+                rparen_span: Span::new(0, 0),
+            }
+        }
+    };
+    QueryExpr::Field(FieldExpr {
+        field_name: fe.field_name.clone(),
+        field_span: fe.field_span,
+        equals_span: fe.equals_span,
+        body,
+    })
+}
+
 /// Rebuild the query in canonical form: `R and (rest)` or `(rest) and R`.
 fn rebuild(
     r: SemanticSearchExpr,
@@ -355,7 +379,11 @@ fn collapse_parens(expr: &QueryExpr) -> QueryExpr {
         }
         QueryExpr::Frequency(f) => {
             let operand_c = collapse_parens(&f.operand);
-            // 频率运算符 (Nf) 前的值片断加括号。
+            // 频率运算符 (Nf) 只允许紧跟值,不能跟在完整的"字段名=值"之后。
+            // 若它直接跟在字段表达式后(可能带一层括号),将其移入字段值内部。
+            if let QueryExpr::Field(fe) = &operand_c {
+                return collapse_parens(&move_frequency_into_field(fe, &f.op, f.op_span));
+            }
             QueryExpr::Frequency(FrequencyExpr {
                 operand: Box::new(wrap_fragment(operand_c)),
                 op: f.op.clone(),
@@ -742,6 +770,55 @@ mod tests {
     #[test]
     fn frequency_fragment_parenthesized() {
         assert_eq!(format("机器人 (3f)"), "(机器人) (3f)\n");
+    }
+
+    #[test]
+    fn frequency_after_field_moved_into_value() {
+        assert_eq!(
+            format("tiabc = (压缩机 or compressor) (9f)"),
+            "tiabc = ((压缩机 or compressor) (9f))\n"
+        );
+    }
+
+    #[test]
+    fn frequency_after_field_simple_value_moved_into_value() {
+        assert_eq!(format("ti = 压缩机 (3f)"), "ti = ((压缩机) (3f))\n");
+    }
+
+    #[test]
+    fn frequency_after_grouped_field_moved_into_value() {
+        assert_eq!(
+            format("(tiabc = (压缩机)) (9f)"),
+            "tiabc = ((压缩机) (9f))\n"
+        );
+    }
+
+    #[test]
+    fn frequency_inside_value_stays_in_value() {
+        assert_eq!(format("des = ((比热容) (7f))"), "des = ((比热容) (7f))\n");
+    }
+
+    #[test]
+    fn r_preserved_when_following_frequency_query() {
+        // 回归:格式化产物必须可再次解析且稳定,否则 dprint 重复格式化会丢 R
+        let input = "(\n        (tiabc = (压缩机 or compressor) (9f))\n    and des = ((比热容) (7f))\n    and des = ((温差) (s) (第二 or second))\n    and pd = [20010101 to 20260801]\n    and ipc = (F25B39/02)\n    and fi = (F25B39/02)\n    and class = (F25B39/02)\n)\nR = (一种空调水系统水容量检测方法)";
+        let config = ConfigurationBuilder::new().build();
+        let pass1 = format_text(Path::new("t.incopat"), input, &config)
+            .unwrap()
+            .unwrap();
+        assert!(
+            pass1.contains("and R = (一种空调水系统水容量检测方法)"),
+            "R 被删除:\n{}",
+            pass1
+        );
+        assert!(pass1.contains("tiabc = ((压缩机 or compressor) (9f))"));
+        // 第二次格式化必须无变化
+        let pass2 = format_text(Path::new("t.incopat"), &pass1, &config).unwrap();
+        assert!(
+            pass2.is_none(),
+            "输出不稳定:\n{}",
+            pass2.unwrap_or_default()
+        );
     }
 
     #[test]

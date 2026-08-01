@@ -102,3 +102,27 @@ tiabc = (y) or des = (z) and RPD = (x)
      or des = (z)
 )
 and RPD = (x)
+
+== should keep R and move frequency into field value ==
+(
+        (tiabc = (压缩机 or compressor) (9f))
+    and des = ((比热容) (7f))
+    and des = ((温差) (s) (第二 or second))
+    and pd = [20010101 to 20260801]
+    and ipc = (F25B39/02)
+    and fi = (F25B39/02)
+    and class = (F25B39/02)
+)
+R = (一种空调水系统水容量检测方法)
+
+[expect]
+(
+        tiabc = ((压缩机 or compressor) (9f))
+    and des = ((比热容) (7f))
+    and des = ((温差) (s) (第二 or second))
+    and pd = [20010101 to 20260801]
+    and ipc = (F25B39/02)
+    and fi = (F25B39/02)
+    and class = (F25B39/02)
+)
+and R = (一种空调水系统水容量检测方法)
