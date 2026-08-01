@@ -15,19 +15,19 @@ data (3n) line
 空调 (s) 蒸发器
 
 [expect]
-空调 (s) 蒸发器
+(空调) (s) (蒸发器)
 
 == should format proximity operator (p) ==
 空调 (p) 蒸发器
 
 [expect]
-空调 (p) 蒸发器
+(空调) (p) (蒸发器)
 
 == should format frequency operator ==
 tiab=("机器人" (3f))
 
 [expect]
-tiab = ("机器人" (3f))
+tiab = (("机器人") (3f))
 
 == should format proximity without number ==
 data (w) line

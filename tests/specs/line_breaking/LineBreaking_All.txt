@@ -9,6 +9,8 @@ ti = (空调 or 蒸发器)
 ti=(空调 or "air condition") and ab=(蒸发器 or evaporator) or ipc=H01L
 
 [expect]
-    ti = (空调 or "air condition")
-and ab = (蒸发器 or evaporator)
- or ipc = H01L
+(
+        ti = (空调 or "air condition")
+    and ab = (蒸发器 or evaporator)
+     or ipc = (H01L)
+)

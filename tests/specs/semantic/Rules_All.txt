@@ -1,0 +1,104 @@
+-- /file.incopat --
+== should keep R at end with wrapped rest ==
+(tiabc = (压缩机 or compressor) and des = (比热容)) and R = (一种空调水系统水容量自测工具)
+
+[expect]
+(
+        tiabc = (压缩机 or compressor)
+    and des = (比热容)
+)
+and R = (一种空调水系统水容量自测工具)
+
+== should keep R at start with wrapped rest ==
+R = (一种空调水系统水容量自测工具) and (tiabc = (压缩机 or compressor) and des = (比热容))
+
+[expect]
+    R = (一种空调水系统水容量自测工具)
+and (
+        tiabc = (压缩机 or compressor)
+    and des = (比热容)
+)
+
+== should keep single-field rest unwrapped at end ==
+des = (比热容) and R = (一种空调水系统水容量自测工具)
+
+[expect]
+    des = (比热容)
+and R = (一种空调水系统水容量自测工具)
+
+== should keep single-field rest unwrapped at start ==
+R = (一种空调水系统水容量自测工具) and des = (比热容)
+
+[expect]
+    R = (一种空调水系统水容量自测工具)
+and des = (比热容)
+
+== should wrap multi-field rest in parentheses at end ==
+tiabc = (压缩机 or compressor) or des = (比热容) and R = (一种空调水系统水容量自测工具)
+
+[expect]
+(
+        tiabc = (压缩机 or compressor)
+     or des = (比热容)
+)
+and R = (一种空调水系统水容量自测工具)
+
+== should wrap multi-field rest in parentheses at start ==
+R = (一种空调水系统水容量自测工具) and tiabc = (压缩机 or compressor) and des = (比热容)
+
+[expect]
+    R = (一种空调水系统水容量自测工具)
+and (
+        tiabc = (压缩机 or compressor)
+    and des = (比热容)
+)
+
+== should unwrap outer group around query with R ==
+((tiabc = (压缩机 or compressor) and des = (比热容)) and R = (一种空调水系统水容量自测工具))
+
+[expect]
+(
+        tiabc = (压缩机 or compressor)
+    and des = (比热容)
+)
+and R = (一种空调水系统水容量自测工具)
+
+== should unwrap group around R alone ==
+(R = (CN101850473B))
+
+[expect]
+R = (CN101850473B)
+
+== should correct or connector to and at start ==
+R = (一种空调水系统水容量自测工具) or tiabc = (压缩机)
+
+[expect]
+    R = (一种空调水系统水容量自测工具)
+and tiabc = (压缩机)
+
+== should correct or connector to and at end ==
+tiabc = (压缩机) or R = (一种空调水系统水容量自测工具)
+
+[expect]
+    tiabc = (压缩机)
+and R = (一种空调水系统水容量自测工具)
+
+== should format RAD with the same rules ==
+RAD = (x) and tiabc = (y) and des = (z)
+
+[expect]
+    RAD = (x)
+and (
+        tiabc = (y)
+    and des = (z)
+)
+
+== should format RPD with the same rules ==
+tiabc = (y) or des = (z) and RPD = (x)
+
+[expect]
+(
+        tiabc = (y)
+     or des = (z)
+)
+and RPD = (x)

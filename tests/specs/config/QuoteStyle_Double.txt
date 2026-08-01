@@ -4,4 +4,4 @@
 ti='air condition'
 
 [expect]
-ti = "air condition"
+ti = ("air condition")

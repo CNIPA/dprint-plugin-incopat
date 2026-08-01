@@ -9,13 +9,13 @@
 TI=汽车
 
 [expect]
-ti = 汽车
+ti = (汽车)
 
 == should format a field with quoted value ==
 TI="air condition"
 
 [expect]
-ti = "air condition"
+ti = ("air condition")
 
 == should format a parenthesized field body ==
 TI=(空调 or 蒸发器)
@@ -27,10 +27,10 @@ ti = (空调 or 蒸发器)
 TI=m?tor*
 
 [expect]
-ti = m?tor*
+ti = (m?tor*)
 
 == should format dollar wildcard ==
 TI=comput$
 
 [expect]
-ti = comput$
+ti = (comput$)

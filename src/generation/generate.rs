@@ -60,11 +60,7 @@ struct FlatPart<'a> {
 
 /// Recursively flatten a binary expression tree into a linear list of
 /// (operator, operand) pairs for formatting.
-fn flatten_binary_chain<'a>(
-    expr: &'a QueryExpr,
-    parts: &mut Vec<FlatPart<'a>>,
-    ctx: &Context,
-) {
+fn flatten_binary_chain<'a>(expr: &'a QueryExpr, parts: &mut Vec<FlatPart<'a>>, ctx: &Context) {
     match expr {
         QueryExpr::Binary(b) => {
             // Flatten left subtree first
@@ -130,8 +126,13 @@ fn gen_top_level_binary(expr: &QueryExpr, ctx: &Context) -> PrintItems {
     let align_width = calc_align_width(&parts);
     let mut items = PrintItems::new();
 
-    // First operand (with right-justified op if present, or leading padding)
-    emit_aligned_part(&parts[0], align_width, &mut items, ctx);
+    // First operand. Groups start at the line start without alignment
+    // padding so the opening paren hugs the left margin.
+    if matches!(parts[0].expr, QueryExpr::Group(_)) {
+        items.extend(gen_expr(parts[0].expr, ctx));
+    } else {
+        emit_aligned_part(&parts[0], align_width, &mut items, ctx);
+    }
 
     // Continuation lines with forced breaks
     for part in &parts[1..] {
@@ -168,12 +169,7 @@ fn gen_single_part(part: &FlatPart, ctx: &Context) -> PrintItems {
 /// Emit a part with right-justified operator alignment.
 /// If the part has an op, right-justify it within `align_width` chars.
 /// If the part has no op (first operand), emit `align_width` spaces as padding.
-fn emit_aligned_part(
-    part: &FlatPart,
-    align_width: usize,
-    items: &mut PrintItems,
-    ctx: &Context,
-) {
+fn emit_aligned_part(part: &FlatPart, align_width: usize, items: &mut PrintItems, ctx: &Context) {
     if let Some(ref op) = part.op {
         let pad = align_width.saturating_sub(op.len() + 1);
         if pad > 0 {
@@ -271,9 +267,7 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
             items.push_condition(Condition::new(
                 "opAlign",
                 ConditionProperties {
-                    condition: Rc::new(|context| {
-                        Some(context.writer_info.is_start_of_line())
-                    }),
+                    condition: Rc::new(|context| Some(context.writer_info.is_start_of_line())),
                     true_path: Some(true_path),
                     false_path: Some(false_path),
                 },
@@ -319,7 +313,65 @@ fn gen_field(expr: &FieldExpr, ctx: &Context) -> PrintItems {
 fn gen_group(expr: &GroupExpr, ctx: &Context) -> PrintItems {
     let mut items = PrintItems::new();
     items.push_string("(".into());
-    items.extend(gen_expr(&expr.inner, ctx));
+
+    // Groups inside field values keep the adaptive inline style.
+    if ctx.in_field_body {
+        let inner_ctx = ctx.with_field_body();
+        items.extend(gen_expr(&expr.inner, &inner_ctx));
+        items.push_string(")".into());
+        return items;
+    }
+
+    let mut parts = Vec::new();
+    flatten_binary_chain(&expr.inner, &mut parts, ctx);
+
+    // Single-part groups stay on one line.
+    if parts.len() <= 1 {
+        let inner_ctx = ctx.with_group();
+        items.extend(gen_expr(&expr.inner, &inner_ctx));
+        items.push_string(")".into());
+        return items;
+    }
+
+    // Multi-part chains inside a group render one field per line, indented
+    // 8 characters per nesting level so the fields align with the fields
+    // following the and/or/not connectors.
+    let indent_col = 8 * (ctx.depth + 1);
+    let group_ctx = ctx.with_group();
+
+    items.push_signal(Signal::NewLine);
+
+    // First field, padded to the indent column.
+    match parts[0].op.clone() {
+        Some(op) => {
+            let pad = indent_col.saturating_sub(op.len() + 1);
+            items.push_string(" ".repeat(pad));
+            items.push_string(op);
+            items.push_string(" ".into());
+        }
+        None => {
+            items.push_string(" ".repeat(indent_col));
+        }
+    }
+    items.extend(gen_expr(parts[0].expr, &group_ctx));
+
+    // Continuation fields with right-justified connectors.
+    for part in &parts[1..] {
+        items.push_signal(Signal::NewLine);
+        let op = part.op.clone().unwrap_or_else(|| "and".to_string());
+        let pad = indent_col.saturating_sub(op.len() + 1);
+        items.push_string(" ".repeat(pad));
+        items.push_string(op);
+        items.push_string(" ".into());
+        items.extend(gen_expr(part.expr, &group_ctx));
+    }
+
+    items.push_signal(Signal::NewLine);
+    // The closing paren aligns with the opening paren: 8 chars per level.
+    let close_col = 8 * ctx.depth;
+    if close_col > 0 {
+        items.push_string(" ".repeat(close_col));
+    }
     items.push_string(")".into());
     items
 }
@@ -482,10 +534,10 @@ fn format_case(text: &str, case: CaseStyle) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
     use crate::configuration::builder::ConfigurationBuilder;
     use crate::configuration::types::*;
     use crate::format_text::format_text;
+    use std::path::Path;
 
     fn format(input: &str) -> String {
         let config = ConfigurationBuilder::new().build();
@@ -512,7 +564,7 @@ mod tests {
 
     #[test]
     fn field_lowercase() {
-        assert_eq!(format("TI=汽车"), "ti = 汽车\n");
+        assert_eq!(format("TI=汽车"), "ti = (汽车)\n");
     }
 
     #[test]
@@ -520,15 +572,12 @@ mod tests {
         let result = format_with("ti=汽车", |b| {
             b.field_case(CaseStyle::Uppercase);
         });
-        assert_eq!(result, "TI = 汽车\n");
+        assert_eq!(result, "TI = (汽车)\n");
     }
 
     #[test]
     fn field_with_parenthesized_body() {
-        assert_eq!(
-            format("TI=(空调 or 蒸发器)"),
-            "ti = (空调 or 蒸发器)\n"
-        );
+        assert_eq!(format("TI=(空调 or 蒸发器)"), "ti = (空调 or 蒸发器)\n");
     }
 
     // ── Top-level binary breaking ──
@@ -537,7 +586,7 @@ mod tests {
     fn top_level_and_breaks() {
         assert_eq!(
             format("TI=空调 and AB=蒸发器"),
-            "    ti = 空调\nand ab = 蒸发器\n"
+            "(\n        ti = (空调)\n    and ab = (蒸发器)\n)\n"
         );
     }
 
@@ -545,7 +594,7 @@ mod tests {
     fn top_level_or_breaks() {
         assert_eq!(
             format("TI=空调 or AB=蒸发器"),
-            "   ti = 空调\nor ab = 蒸发器\n"
+            "(\n        ti = (空调)\n     or ab = (蒸发器)\n)\n"
         );
     }
 
@@ -553,7 +602,7 @@ mod tests {
     fn top_level_chain_three_parts() {
         assert_eq!(
             format("TI=a AND AB=b OR IPC=c"),
-            "    ti = a\nand ab = b\n or ipc = c\n"
+            "(\n        ti = (a)\n    and ab = (b)\n     or ipc = (c)\n)\n"
         );
     }
 
@@ -561,7 +610,7 @@ mod tests {
     fn top_level_not_in_chain() {
         assert_eq!(
             format("TI=a not AB=b"),
-            "    ti = a\nnot ab = b\n"
+            "(\n        ti = (a)\n    not ab = (b)\n)\n"
         );
     }
 
@@ -572,17 +621,14 @@ mod tests {
         let result = format_with("TI=空调 and AB=蒸发器", |b| {
             b.boolean_operator_case(CaseStyle::Uppercase);
         });
-        assert_eq!(result, "    ti = 空调\nAND ab = 蒸发器\n");
+        assert_eq!(result, "(\n        ti = (空调)\n    AND ab = (蒸发器)\n)\n");
     }
 
     // ── Inner binary (adaptive breaking) ──
 
     #[test]
     fn inner_or_chain_fits_single_line() {
-        assert_eq!(
-            format("ti=(空调 or 蒸发器)"),
-            "ti = (空调 or 蒸发器)\n"
-        );
+        assert_eq!(format("ti=(空调 or 蒸发器)"), "ti = (空调 or 蒸发器)\n");
     }
 
     // ── Bracket range expression ──
@@ -607,20 +653,14 @@ mod tests {
 
     #[test]
     fn comparison_range_single() {
-        assert_eq!(
-            format("(PD>20190101)"),
-            "(pd>20190101)\n"
-        );
+        assert_eq!(format("(PD>20190101)"), "(pd>20190101)\n");
     }
 
     // ── Quoted strings ──
 
     #[test]
     fn quoted_string_preserve() {
-        assert_eq!(
-            format("TI=\"air condition\""),
-            "ti = \"air condition\"\n"
-        );
+        assert_eq!(format("TI=\"air condition\""), "ti = (\"air condition\")\n");
     }
 
     #[test]
@@ -628,7 +668,7 @@ mod tests {
         let result = format_with("TI=\"air condition\"", |b| {
             b.quote_style(QuoteStyle::Single);
         });
-        assert_eq!(result, "ti = 'air condition'\n");
+        assert_eq!(result, "ti = ('air condition')\n");
     }
 
     // ── Proximity & frequency ──
@@ -642,7 +682,7 @@ mod tests {
     fn frequency_operator() {
         assert_eq!(
             format("tiab=(\"机器人\" (3f))"),
-            "tiab = (\"机器人\" (3f))\n"
+            "tiab = ((\"机器人\") (3f))\n"
         );
     }
 
@@ -660,10 +700,7 @@ mod tests {
 
     #[test]
     fn semantic_search_r() {
-        assert_eq!(
-            format("R=(CN101850473B)"),
-            "R = (CN101850473B)\n"
-        );
+        assert_eq!(format("R=(CN101850473B)"), "R = (CN101850473B)\n");
     }
 
     #[test]
@@ -680,16 +717,13 @@ mod tests {
     fn comment_preserved() {
         assert_eq!(
             format("# this is a comment\nti=test"),
-            "# this is a comment\nti = test\n"
+            "# this is a comment\nti = (test)\n"
         );
     }
 
     #[test]
     fn blank_line_between_queries() {
-        assert_eq!(
-            format("ti=a\n\nti=b"),
-            "ti = a\n\nti = b\n"
-        );
+        assert_eq!(format("ti=a\n\nti=b"), "ti = (a)\n\nti = (b)\n");
     }
 
     // ── Complex real-world query ──
@@ -700,7 +734,7 @@ mod tests {
         let result = format(input);
         assert_eq!(
             result,
-            "    ti = (空调 or \"air condition\" or 空气调节)\nand tiab = (蒸发器 or evaporator)\n"
+            "(\n        ti = (空调 or \"air condition\" or 空气调节)\n    and tiab = (蒸发器 or evaporator)\n)\n"
         );
     }
 
@@ -708,9 +742,12 @@ mod tests {
 
     #[test]
     fn already_formatted_returns_none() {
-        let formatted = "    ti = 空调\nand ab = 蒸发器\n";
+        let formatted = "(\n        ti = (空调)\n    and ab = (蒸发器)\n)\n";
         let config = ConfigurationBuilder::new().build();
         let result = format_text(Path::new("test.incopat"), formatted, &config).unwrap();
-        assert!(result.is_none(), "already formatted text should return None");
+        assert!(
+            result.is_none(),
+            "already formatted text should return None"
+        );
     }
 }

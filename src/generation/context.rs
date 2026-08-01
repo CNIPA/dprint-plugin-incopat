@@ -36,4 +36,14 @@ impl<'a> Context<'a> {
             in_field_body: true,
         }
     }
+
+    /// Return a new context nested one level deeper inside a group.
+    pub fn with_group(&self) -> Context<'a> {
+        Context {
+            config: self.config,
+            source: self.source,
+            depth: self.depth + 1,
+            in_field_body: self.in_field_body,
+        }
+    }
 }

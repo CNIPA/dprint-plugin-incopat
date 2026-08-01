@@ -1,7 +1,8 @@
 pub mod configuration;
 mod format_text;
-pub mod parser;
 mod generation;
+mod normalize;
+pub mod parser;
 
 pub use format_text::format_text;
 

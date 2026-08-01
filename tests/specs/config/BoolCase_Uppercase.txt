@@ -4,5 +4,7 @@
 ti=空调 and ab=蒸发器
 
 [expect]
-    ti = 空调
-AND ab = 蒸发器
+(
+        ti = (空调)
+    AND ab = (蒸发器)
+)

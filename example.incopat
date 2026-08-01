@@ -2,28 +2,32 @@
 # This file demonstrates the formatting rules for incoPat patent search expressions.
 
 # Simple field search
-ti=空调
+ti = (空调)
 
 # Compound field search with boolean OR
-tiab=(空调 or "air conditioner" or 空气调节)
+tiab = (空调 or "air conditioner" or 空气调节)
 
 # Multi-field AND query (top-level binary chain with right-justified alignment)
-    ti=(空调 or "air conditioner")
-and ab=(蒸发器 or evaporator)
-and ipc=F25B
+(
+        ti = (空调 or "air conditioner")
+    and ab = (蒸发器 or evaporator)
+    and ipc = (F25B)
+)
 
 # NOT operator
-    ti=空调
-not ab=冰箱
+(
+        ti = (空调)
+    not ab = (冰箱)
+)
 
 # Proximity search
-tiab=(空调 (2w) 蒸发器)
+tiab = (空调 (2w) 蒸发器)
 
 # Frequency search
-tiab=("机器人" (3f))
+tiab = (("机器人") (3f))
 
 # Bracket range
-pd=[20200101 to 20241231]
+pd = [20200101 to 20241231]
 
 # Comparison range
 (20110101<=pd<=20130101)
@@ -32,20 +36,25 @@ pd=[20200101 to 20241231]
 (pd>20190101)
 
 # TREE@ operator for company hierarchy
-ap=(TREE@"清华大学")
+ap = (TREE@"清华大学")
 
 # Semantic search (R/RAD/RPD)
-R=(CN101850473B)
+R = (CN101850473B)
 
 # Semantic search combined with regular query
-    RAD=(CN101850473B)
-and tiab=(发动机 or engine)
+    RAD = (CN101850473B)
+and tiab = (发动机 or engine)
 
 # Wildcard search
-ti=comput$ and ab=m?chine
+(
+        ti = (comput$)
+    and ab = (m?chine)
+)
 
 # Complex real-world query
-    ti=(空调 or "air conditioner" or 空气调节)
-and tiab=(蒸发器 or evaporator or "heat exchanger")
-and (20200101<=pd<=20241231)
-not ap=格力
+(
+        ti = (空调 or "air conditioner" or 空气调节)
+    and tiab = (蒸发器 or evaporator or "heat exchanger")
+    and (20200101<=pd<=20241231)
+    not ap = (格力)
+)

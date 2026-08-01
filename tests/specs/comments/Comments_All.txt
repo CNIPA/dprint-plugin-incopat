@@ -5,7 +5,7 @@ ti=test
 
 [expect]
 # this is a comment
-ti = test
+ti = (test)
 
 == should preserve blank lines between queries ==
 ti=a
@@ -13,9 +13,9 @@ ti=a
 ti=b
 
 [expect]
-ti = a
+ti = (a)
 
-ti = b
+ti = (b)
 
 == should preserve comment between queries ==
 ti=a
@@ -23,6 +23,6 @@ ti=a
 ti=b
 
 [expect]
-ti = a
+ti = (a)
 # separator
-ti = b
+ti = (b)
