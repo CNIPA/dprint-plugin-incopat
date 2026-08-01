@@ -11,8 +11,8 @@ use dprint_core::plugins::SyncFormatRequest;
 use dprint_core::plugins::SyncHostFormatRequest;
 use dprint_core::plugins::SyncPluginHandler;
 
-use super::configuration::Configuration;
 use super::configuration::resolve_config;
+use super::configuration::Configuration;
 
 struct IncopatPluginHandler;
 
@@ -46,9 +46,12 @@ impl SyncPluginHandler<Configuration> for IncopatPluginHandler {
             name: env!("CARGO_PKG_NAME").to_string(),
             version: version.clone(),
             config_key: "incopat".to_string(),
-            help_url: "https://github.com/user/dprint-plugin-incopat".to_string(),
+            help_url: "https://github.com/CNIPA/dprint-plugin-incopat".to_string(),
             config_schema_url: String::new(),
-            update_url: None,
+            update_url: Some(
+                "https://raw.githubusercontent.com/CNIPA/dprint-plugin-incopat/main/latest.json"
+                    .to_string(),
+            ),
         }
     }
 
