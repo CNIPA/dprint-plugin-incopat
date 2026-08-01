@@ -1,6 +1,6 @@
 [package]
 name = "dprint-plugin-incopat"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["clinku"]
 edition = "2021"
 license = "MIT"
