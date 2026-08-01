@@ -120,6 +120,15 @@ fn parent_connector(expr: &QueryExpr) -> Option<(BoolOp, Span)> {
 fn extract_r(expr: &QueryExpr) -> Result<(Option<QueryExpr>, Option<SemanticSearchExpr>), String> {
     match expr {
         QueryExpr::SemanticSearch(s) if is_semantic_keyword(&s.keyword) => {
+            // A semantic search value must not itself contain another semantic
+            // search expression (e.g. a pasted query merged into the value).
+            let contains = match &s.body {
+                FieldBody::Simple(inner) => semantic_in(inner),
+                FieldBody::Parenthesized { inner, .. } => semantic_in(inner),
+            };
+            if contains {
+                return Err("语义检索字段 (R/RAD/RPD) 只能出现一次".to_string());
+            }
             Ok((None, Some(s.clone())))
         }
         QueryExpr::Binary(b) => {
@@ -582,6 +591,15 @@ mod tests {
     fn r_in_middle_errors() {
         let msg = format_err("tiabc = (a) and R = (b) and des = (c)");
         assert!(msg.contains("开头或结尾"), "unexpected: {}", msg);
+    }
+
+    #[test]
+    fn r_nested_in_another_r_value_errors() {
+        // 一个 R 的值里又嵌入了另一个语义字段(粘贴合并错误)
+        let msg = format_err(
+            "R = (一种 and (tiabc = (压缩机) and class = (F25B39/02))\nand R = (一种空调水系统水容量自测工具))",
+        );
+        assert!(msg.contains("只能出现一次"), "unexpected: {}", msg);
     }
 
     #[test]
