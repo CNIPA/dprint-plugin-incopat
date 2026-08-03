@@ -1,0 +1,28 @@
+-- /file.incopat --
+== unknown field is preserved and formatted ==
+apnortt=(清华大学)
+
+[expect]
+apnortt = (清华大学)
+
+== unknown field with simple value gets auto parens ==
+foo = 压缩机
+
+[expect]
+foo = (压缩机)
+
+== unknown field combined with known fields ==
+apnortt=(清华大学)
+and tiabc = (压缩机 or compressor)
+
+[expect]
+(
+        apnortt = (清华大学)
+    and tiabc = (压缩机 or compressor)
+)
+
+== unknown field with range value ==
+somefield=[20200101 to 20241231]
+
+[expect]
+somefield = [20200101 to 20241231]

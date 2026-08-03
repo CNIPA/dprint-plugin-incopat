@@ -1,4 +1,4 @@
-use super::fields::{is_field_code, is_semantic_keyword};
+use super::fields::is_semantic_keyword;
 use super::token::{Span, Token, TokenKind};
 
 /// Lexer for incoPat search query syntax.
@@ -263,8 +263,11 @@ impl<'a> Lexer<'a> {
             return Token::new(TokenKind::SemanticKeyword, Span::new(byte_start, byte_end));
         }
 
-        // Check if this is a field code (word followed by '=')
-        if has_equals_ahead && is_field_code(word) {
+        // Any word followed by '=' is treated as a field code. Known codes are
+        // validated by the generator; unknown ones (e.g. official fields that
+        // are missing from our list) are preserved structurally instead of
+        // being dropped as unparseable input.
+        if has_equals_ahead {
             return Token::new(TokenKind::FieldCode, Span::new(byte_start, byte_end));
         }
 
