@@ -228,6 +228,7 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
     }
 
     let align_width = calc_align_width(&parts);
+    let continuation_indent = 8 * (ctx.depth + 1);
     let mut items = PrintItems::new();
 
     // First operand — add alignment padding only when already at start of line
@@ -253,6 +254,7 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
 
             // When at start of line (broke): right-justified padding + op + space
             let mut true_path = PrintItems::new();
+            true_path.push_string(" ".repeat(continuation_indent));
             if op_pad > 0 {
                 true_path.push_string(" ".repeat(op_pad));
             }
@@ -299,11 +301,39 @@ fn gen_field(expr: &FieldExpr, ctx: &Context) -> PrintItems {
             items.extend(gen_expr(inner, ctx));
         }
         FieldBody::Parenthesized { inner, .. } => {
-            items.push_string("(".into());
-            // Field body uses adaptive line breaking (only break if exceeds line width)
             let body_ctx = ctx.with_field_body();
+            let body_indent = 8 * (ctx.depth + 1);
+            let close_indent = 8 * ctx.depth;
+
+            items.push_string("(".into());
+            items.push_signal(Signal::SpaceOrNewLine);
+
+            let mut multiline_condition = Condition::new(
+                "multilineFieldBody",
+                ConditionProperties {
+                    condition: condition_resolvers::is_start_of_line(),
+                    true_path: Some(" ".repeat(body_indent).into()),
+                    false_path: None,
+                },
+            );
+            let multiline_reference = multiline_condition.create_reference();
+            items.push_condition(multiline_condition);
             items.extend(gen_expr(inner, &body_ctx));
-            items.push_string(")".into());
+
+            let mut closing_path = PrintItems::new();
+            closing_path.push_signal(Signal::NewLine);
+            if close_indent > 0 {
+                closing_path.push_string(" ".repeat(close_indent));
+            }
+            closing_path.push_string(")".into());
+            items.push_condition(Condition::new(
+                "multilineFieldBodyClosingParen",
+                ConditionProperties {
+                    condition: multiline_reference.create_resolver(),
+                    true_path: Some(closing_path),
+                    false_path: Some(")".into()),
+                },
+            ));
         }
     }
 

@@ -5,6 +5,15 @@ ti=(空调 or 蒸发器)
 [expect]
 ti = (空调 or 蒸发器)
 
+== should indent wrapped field-value binary chains ==
+ti=(空调 or 空气冷却器 or 干式冷却器 or "dry cooler" or "dry cooling unit" or "air cooled heat exchanger" or "air-cooled cooler")
+
+[expect]
+ti = (
+    空调 or 空气冷却器 or 干式冷却器 or "dry cooler" or "dry cooling unit" or "air cooled heat exchanger"
+    or "air-cooled cooler"
+)
+
 == should break top-level binary chains ==
 ti=(空调 or "air condition") and ab=(蒸发器 or evaporator) or ipc=H01L
 

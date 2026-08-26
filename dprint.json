@@ -13,5 +13,8 @@
   ],
   "excludes": [
     "target"
+  ],
+  "plugins": [
+    "https://github.com/CNIPA/dprint-plugin-incopat/releases/download/v0.2.4/dprint_plugin_incopat.wasm"
   ]
 }
