@@ -228,7 +228,9 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
     }
 
     let align_width = calc_align_width(&parts);
-    let continuation_indent = 8 * (ctx.depth + 1);
+    // Wrapped field-value chains are indented 4 columns past the field's own
+    // start column (fields start at 8 columns per group nesting level).
+    let continuation_indent = 8 * ctx.depth + 4;
     let mut items = PrintItems::new();
 
     // First operand — add alignment padding only when already at start of line
@@ -302,11 +304,22 @@ fn gen_field(expr: &FieldExpr, ctx: &Context) -> PrintItems {
         }
         FieldBody::Parenthesized { inner, .. } => {
             let body_ctx = ctx.with_field_body();
-            let body_indent = 8 * (ctx.depth + 1);
+            // Field values use a hanging indent: the wrapped content sits
+            // 4 columns to the right of the field's own start column, and
+            // the closing paren aligns with the field start.
+            let body_indent = 8 * ctx.depth + 4;
             let close_indent = 8 * ctx.depth;
 
             items.push_string("(".into());
-            items.push_signal(Signal::SpaceOrNewLine);
+            // Break right after the opening paren when the value doesn't fit
+            // on the current line. Unlike SpaceOrNewLine this emits nothing
+            // when the value stays on one line.
+            items.push_signal(Signal::PossibleNewLine);
+            // The body gets its own new-line group so the inner `and`/`or`
+            // separators cannot override the break point after `(` — when the
+            // value is too wide the printer first breaks after `(`, then the
+            // chain breaks internally at the separators.
+            items.push_signal(Signal::StartNewLineGroup);
 
             let mut multiline_condition = Condition::new(
                 "multilineFieldBody",
@@ -319,6 +332,7 @@ fn gen_field(expr: &FieldExpr, ctx: &Context) -> PrintItems {
             let multiline_reference = multiline_condition.create_reference();
             items.push_condition(multiline_condition);
             items.extend(gen_expr(inner, &body_ctx));
+            items.push_signal(Signal::FinishNewLineGroup);
 
             let mut closing_path = PrintItems::new();
             closing_path.push_signal(Signal::NewLine);
