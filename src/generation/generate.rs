@@ -304,10 +304,11 @@ fn gen_field(expr: &FieldExpr, ctx: &Context) -> PrintItems {
         }
         FieldBody::Parenthesized { inner, .. } => {
             let body_ctx = ctx.with_field_body();
-            // Field values use a hanging indent: the wrapped content sits
-            // 4 columns to the right of the field's own start column, and
-            // the closing paren aligns with the field start.
-            let body_indent = 8 * ctx.depth + 4;
+            // Field values use a hanging indent: the first content line sits
+            // 8 columns past the closing-paren column (same spacing as group
+            // fields), the continuation lines sit 4 columns past it, and the
+            // closing paren aligns with the field start.
+            let body_indent = 8 * ctx.depth + 8;
             let close_indent = 8 * ctx.depth;
 
             items.push_string("(".into());
