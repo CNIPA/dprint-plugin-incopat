@@ -228,9 +228,13 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
     }
 
     let align_width = calc_align_width(&parts);
-    // Wrapped field-value chains are indented 4 columns past the field's own
-    // start column (fields start at 8 columns per group nesting level).
-    let continuation_indent = 8 * ctx.depth + 4;
+    // Wrapped field-value chains are indented 4 columns past the column the
+    // value's closing paren sits in: the field's own start column, or the
+    // column of the enclosing wrapped block inside a value.
+    let continuation_indent = match ctx.block_close_col {
+        Some(close_col) => close_col + 4,
+        None => 8 * ctx.depth + 4,
+    };
     let mut items = PrintItems::new();
 
     // First operand — add alignment padding only when already at start of line
@@ -488,13 +492,168 @@ fn gen_comparison_range(expr: &ComparisonRangeExpr, ctx: &Context) -> PrintItems
     items
 }
 
+/// Whether a proximity operator is the same-sentence `(s)` / same-paragraph
+/// `(p)` operator (mirrors the normalizer's classification).
+fn is_sentence_para_op(op: &str) -> bool {
+    let normalized = op.trim_matches(['(', ')']).to_ascii_lowercase();
+    normalized == "s" || normalized == "p"
+}
+
 fn gen_proximity(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
+    // Inside a field value the `(s)` / `(p)` fragments are rendered as
+    // parenthesized blocks so the operator stays visible when the value wraps.
+    if ctx.in_field_body && is_sentence_para_op(&expr.op) {
+        return gen_sentence_para_proximity(expr, ctx);
+    }
+
     let mut items = PrintItems::new();
     items.extend(gen_expr(&expr.left, ctx));
     items.push_string(" ".into());
     items.push_string(expr.op.clone());
     items.push_string(" ".into());
     items.extend(gen_expr(&expr.right, ctx));
+    items
+}
+
+/// Generate IR for a `(s)` / `(p)` proximity expression inside a field value.
+///
+/// The two fragments are parenthesized blocks sitting in the field value's
+/// content column. They stay on one line with the operator when everything
+/// fits (`(fragment) (s) (fragment)`). Otherwise the operator starts its own
+/// line, right-justified in front of the second block, so both blocks'
+/// parentheses line up:
+///
+/// ```text
+/// (
+///         fragment ...
+///     or continuation ...
+/// )
+/// (s) (
+///         fragment ...
+/// )
+/// ```
+fn gen_sentence_para_proximity(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
+    let block_col = 8 * ctx.depth + 8;
+    let continuation_indent = 8 * ctx.depth + 4;
+    let mut items = PrintItems::new();
+
+    // Remember the line the first fragment starts on so a wrapped first
+    // fragment can push the operator onto its own line.
+    let start_line = LineNumber::new("proximityStartLine");
+    items.push_info(Info::LineNumber(start_line));
+    items.extend(gen_operand_block(&expr.left, block_col, ctx));
+    let mid_line = LineNumber::new("proximityMidLine");
+    items.push_info(Info::LineNumber(mid_line));
+
+    let mut break_path = PrintItems::new();
+    break_path.push_signal(Signal::NewLine);
+    items.push_condition(Condition::new(
+        "proximityOpBreak",
+        ConditionProperties {
+            condition: Rc::new(move |context| {
+                let start = context.resolved_line_number(start_line)?;
+                let mid = context.resolved_line_number(mid_line)?;
+                Some(mid > start)
+            }),
+            true_path: Some(break_path),
+            // Not wrapped yet: leave a break point behind (with the usual
+            // separating space) so a wrapped second fragment also moves the
+            // operator onto its own line.
+            false_path: Some(Signal::SpaceOrNewLine.into()),
+        },
+    ));
+
+    // The operator itself: right-justified when it starts a line so the second
+    // block begins in the same column as the first one.
+    let mut op_on_new_line = PrintItems::new();
+    op_on_new_line.push_string(" ".repeat(continuation_indent));
+    op_on_new_line.push_string(expr.op.clone());
+    op_on_new_line.push_string(" ".into());
+    let mut op_inline = PrintItems::new();
+    op_inline.push_string(expr.op.clone());
+    op_inline.push_string(" ".into());
+    items.push_condition(Condition::new(
+        "proximityOpAlign",
+        ConditionProperties {
+            condition: Rc::new(|context| Some(context.writer_info.is_start_of_line())),
+            true_path: Some(op_on_new_line),
+            false_path: Some(op_inline),
+        },
+    ));
+
+    items.extend(gen_operand_block(&expr.right, block_col, ctx));
+    items
+}
+
+/// Render one side of a `(s)` / `(p)` proximity expression as a parenthesized
+/// block sitting in `block_col`.
+fn gen_operand_block(operand: &QueryExpr, block_col: usize, ctx: &Context) -> PrintItems {
+    let inner = match operand {
+        // The normalizer already wrapped value fragments; render the block
+        // around the fragment itself instead of nesting another pair of parens.
+        QueryExpr::Group(group) => group.inner.as_ref(),
+        // Self-delimiting ranges keep their own delimiters.
+        QueryExpr::BracketRange(_) | QueryExpr::ComparisonRange(_) => return gen_expr(operand, ctx),
+        other => other,
+    };
+    gen_block(inner, block_col, ctx)
+}
+
+/// Render `inner` as a parenthesized block whose parens hug the content while
+/// it fits (`(content)`) and move onto their own lines when it wraps:
+///
+/// ```text
+/// (
+///         content ...
+///     or continuation ...
+/// )
+/// ```
+///
+/// `open_col` is the column the opening paren sits in; the closing paren is
+/// aligned with it and the content is indented relative to it.
+fn gen_block(inner: &QueryExpr, open_col: usize, ctx: &Context) -> PrintItems {
+    let body_indent = open_col + 8;
+    let body_ctx = ctx.with_block(open_col);
+    let mut items = PrintItems::new();
+
+    // The block is wrapped in two nested new line groups: the outer one keeps
+    // the block's break point (right after the opening paren) shallower than
+    // the content's, the inner one keeps it deeper than an enclosing `(s)`
+    // operator's break point. Wrapping content therefore breaks at the
+    // operator first, then at the paren, then inside the fragments.
+    items.push_signal(Signal::StartNewLineGroup);
+    items.push_string("(".into());
+    items.push_signal(Signal::PossibleNewLine);
+    items.push_signal(Signal::StartNewLineGroup);
+
+    let mut multiline_condition = Condition::new(
+        "multilineBlockBody",
+        ConditionProperties {
+            condition: condition_resolvers::is_start_of_line(),
+            true_path: Some(" ".repeat(body_indent).into()),
+            false_path: None,
+        },
+    );
+    let multiline_reference = multiline_condition.create_reference();
+    items.push_condition(multiline_condition);
+    items.extend(gen_expr(inner, &body_ctx));
+    items.push_signal(Signal::FinishNewLineGroup);
+    items.push_signal(Signal::FinishNewLineGroup);
+
+    let mut closing_path = PrintItems::new();
+    closing_path.push_signal(Signal::NewLine);
+    if open_col > 0 {
+        closing_path.push_string(" ".repeat(open_col));
+    }
+    closing_path.push_string(")".into());
+    items.push_condition(Condition::new(
+        "multilineBlockClosingParen",
+        ConditionProperties {
+            condition: multiline_reference.create_resolver(),
+            true_path: Some(closing_path),
+            false_path: Some(")".into()),
+        },
+    ));
     items
 }
 

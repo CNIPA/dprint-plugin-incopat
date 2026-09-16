@@ -10,6 +10,11 @@ pub struct Context<'a> {
     /// When true, binary chains use adaptive line breaking (SpaceOrNewLine).
     /// Set to true inside field parenthesized bodies.
     pub in_field_body: bool,
+    /// Column of the closing paren of the innermost wrapped block inside a
+    /// field value (e.g. one side of a `(s)` / `(p)` proximity expression).
+    /// Continuation lines of chains inside such a block are indented 4 columns
+    /// past that paren instead of relative to `depth`.
+    pub block_close_col: Option<usize>,
 }
 
 impl<'a> Context<'a> {
@@ -19,6 +24,7 @@ impl<'a> Context<'a> {
             source,
             depth: 0,
             in_field_body: false,
+            block_close_col: None,
         }
     }
 
@@ -34,6 +40,19 @@ impl<'a> Context<'a> {
             source: self.source,
             depth: self.depth,
             in_field_body: true,
+            block_close_col: self.block_close_col,
+        }
+    }
+
+    /// Return a new context for the content of a wrapped block whose closing
+    /// paren sits in `close_col`.
+    pub fn with_block(&self, close_col: usize) -> Context<'a> {
+        Context {
+            config: self.config,
+            source: self.source,
+            depth: self.depth,
+            in_field_body: true,
+            block_close_col: Some(close_col),
         }
     }
 
@@ -44,6 +63,7 @@ impl<'a> Context<'a> {
             source: self.source,
             depth: self.depth + 1,
             in_field_body: self.in_field_body,
+            block_close_col: self.block_close_col,
         }
     }
 }

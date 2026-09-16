@@ -34,3 +34,51 @@ data (w) line
 
 [expect]
 data (w) line
+
+== should keep (s) fragments with the operator when the value fits ==
+tiabc=(温差 (S) 蒸发器)
+
+[expect]
+tiabc = ((温差) (S) (蒸发器))
+
+== should break (s) fragments onto their own lines when they wrap ==
+tiabc=((压缩机 or 冷凝器 or 蒸发器 or 节流阀 or 储液罐 or 干燥过滤器 or 气液分离器 or 油分离器) (s) (空调器 or 热泵机组 or 制冷系统 or 冷却塔 or 风机盘管 or 空气处理机组 or 新风机组 or 冷源))
+
+[expect]
+tiabc = (
+        (压缩机 or 冷凝器 or 蒸发器 or 节流阀 or 储液罐 or 干燥过滤器 or 气液分离器 or 油分离器)
+    (s) (空调器 or 热泵机组 or 制冷系统 or 冷却塔 or 风机盘管 or 空气处理机组 or 新风机组 or 冷源)
+)
+
+== should wrap (s) fragments that are too long for one line ==
+tiabc=((压缩机 or 冷凝器 or 蒸发器 or 节流阀 or 储液罐 or 干燥过滤器 or 气液分离器 or 油分离器 or 电子膨胀阀 or 四通换向阀 or 毛细管 or 过冷器 or 回热器) (s) (空调器 or 热泵机组 or 制冷系统 or 冷却塔 or 风机盘管 or 空气处理机组 or 新风机组 or 冷源 or 末端装置 or 送风口 or 回风口 or 风管 or 风阀))
+
+[expect]
+tiabc = (
+        (
+                压缩机 or 冷凝器 or 蒸发器 or 节流阀 or 储液罐 or 干燥过滤器 or 气液分离器 or 油分离器 or 电子膨胀阀
+            or 四通换向阀 or 毛细管 or 过冷器 or 回热器
+        )
+    (s) (
+                空调器 or 热泵机组 or 制冷系统 or 冷却塔 or 风机盘管 or 空气处理机组 or 新风机组 or 冷源 or 末端装置
+            or 送风口 or 回风口 or 风管 or 风阀
+        )
+)
+
+== should align (s) fragments inside a group ==
+(tiabc=((压缩机 or 冷凝器 or 蒸发器 or 节流阀 or 储液罐 or 干燥过滤器 or 气液分离器 or 油分离器 or 电子膨胀阀 or 四通换向阀 or 毛细管 or 过冷器 or 回热器) (s) (空调器 or 热泵机组 or 制冷系统 or 冷却塔 or 风机盘管 or 空气处理机组 or 新风机组 or 冷源 or 末端装置 or 送风口 or 回风口 or 风管 or 风阀)) and ab=(蒸发器))
+
+[expect]
+(
+        tiabc = (
+                (
+                        压缩机 or 冷凝器 or 蒸发器 or 节流阀 or 储液罐 or 干燥过滤器 or 气液分离器 or 油分离器
+                    or 电子膨胀阀 or 四通换向阀 or 毛细管 or 过冷器 or 回热器
+                )
+            (s) (
+                        空调器 or 热泵机组 or 制冷系统 or 冷却塔 or 风机盘管 or 空气处理机组 or 新风机组 or 冷源
+                    or 末端装置 or 送风口 or 回风口 or 风管 or 风阀
+                )
+        )
+    and ab = (蒸发器)
+)
