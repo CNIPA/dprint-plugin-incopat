@@ -256,16 +256,13 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
     for part in &parts[1..] {
         items.push_signal(Signal::SpaceOrNewLine);
         if let Some(ref op) = part.op {
-            let op_pad = align_width.saturating_sub(op.len() + 1);
-
-            // When at start of line (broke): right-justified padding + op + space
+            // When at start of line (broke): every operator sits in the same
+            // continuation column, followed by enough spaces to line the
+            // operand up with the first content line.
             let mut true_path = PrintItems::new();
             true_path.push_string(" ".repeat(continuation_indent));
-            if op_pad > 0 {
-                true_path.push_string(" ".repeat(op_pad));
-            }
             true_path.push_string(op.clone());
-            true_path.push_string(" ".into());
+            true_path.push_string(" ".repeat(spaces_after_continuation_op(op)));
 
             // When inline (no break): just op + space
             let mut false_path = PrintItems::new();
@@ -285,6 +282,18 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
     }
 
     items
+}
+
+/// Columns between the continuation-operator column of a wrapped chain and the
+/// column its operands start in.
+const OPERAND_OFFSET: usize = 4;
+
+/// Spaces to emit after a continuation operator so that the operand behind it
+/// lines up with the first content line (`or` → 2, `and` → 1). Operators that
+/// are already at least `OPERAND_OFFSET` columns wide (`(3w)`, `(99n)`, ...)
+/// cannot line up, so they keep a single separating space.
+fn spaces_after_continuation_op(op: &str) -> usize {
+    OPERAND_OFFSET.saturating_sub(op.chars().count()).max(1)
 }
 
 fn gen_not(expr: &NotExpr, ctx: &Context) -> PrintItems {
@@ -563,12 +572,12 @@ fn gen_sentence_para_proximity(expr: &ProximityExpr, ctx: &Context) -> PrintItem
         },
     ));
 
-    // The operator itself: right-justified when it starts a line so the second
-    // block begins in the same column as the first one.
+    // The operator itself: in the continuation column when it starts a line so
+    // the second block begins in the same column as the first one.
     let mut op_on_new_line = PrintItems::new();
     op_on_new_line.push_string(" ".repeat(continuation_indent));
     op_on_new_line.push_string(expr.op.clone());
-    op_on_new_line.push_string(" ".into());
+    op_on_new_line.push_string(" ".repeat(spaces_after_continuation_op(&expr.op)));
     let mut op_inline = PrintItems::new();
     op_inline.push_string(expr.op.clone());
     op_inline.push_string(" ".into());
