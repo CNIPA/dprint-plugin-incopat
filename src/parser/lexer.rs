@@ -184,7 +184,8 @@ impl<'a> Lexer<'a> {
     }
 
     /// Disambiguate `(` as either a proximity/frequency operator or a plain LParen.
-    /// Matches patterns: `(Nw)`, `(Nn)`, `(s)`, `(p)`, `(Nf)` where N is 0-2 digits.
+    /// Matches patterns: `(Nw)`, `(Nn)`, `(s)`, `(sen)`, `(p)`, `(Nf)` where N is
+    /// 0-2 digits.
     fn read_lparen_or_operator(&mut self, byte_start: usize) -> Token {
         // Save position for potential backtrack
         let saved_pos = self.pos;
@@ -208,22 +209,34 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        // Read the operator letter
-        if let Some(&(_, ch)) = self.chars.get(self.pos) {
-            let lower = ch.to_ascii_lowercase();
-            if matches!(lower, 'w' | 'n' | 's' | 'p' | 'f') {
+        // Read the operator letters: the single letters `w` / `n` / `s` / `p` /
+        // `f`, or the word form `sen`, an alias of the same-sentence `(s)`
+        // operator. Anything else makes this a plain `(`.
+        let letters_start = self.byte_pos();
+        while let Some(&(_, ch)) = self.chars.get(self.pos) {
+            if ch.is_ascii_alphabetic() {
                 self.pos += 1;
-                // Check for closing ')'
-                if self.peek_char() == Some(')') {
-                    self.pos += 1;
-                    let byte_end = self.byte_pos();
-                    let kind = if lower == 'f' {
-                        TokenKind::FrequencyOp
-                    } else {
-                        TokenKind::ProximityOp
-                    };
-                    return Token::new(kind, Span::new(byte_start, byte_end));
-                }
+            } else {
+                break;
+            }
+        }
+        let letters = self.source[letters_start..self.byte_pos()].to_ascii_lowercase();
+        let is_operator = if digit_count == 0 {
+            matches!(letters.as_str(), "w" | "n" | "s" | "p" | "f" | "sen")
+        } else {
+            matches!(letters.as_str(), "w" | "n" | "s" | "p" | "f")
+        };
+        if is_operator {
+            // Check for closing ')'
+            if self.peek_char() == Some(')') {
+                self.pos += 1;
+                let byte_end = self.byte_pos();
+                let kind = if letters == "f" {
+                    TokenKind::FrequencyOp
+                } else {
+                    TokenKind::ProximityOp
+                };
+                return Token::new(kind, Span::new(byte_start, byte_end));
             }
         }
 
@@ -501,6 +514,29 @@ mod tests {
             vec![
                 (Keyword, "a"),
                 (ProximityOp, "(s)"),
+                (Keyword, "b"),
+            ]
+        );
+    }
+
+    #[test]
+    fn proximity_sen_operator() {
+        // `(sen)` is the same-sentence operator, an alias of `(s)`.
+        let result = lex("a (sen) b");
+        assert_eq!(
+            result,
+            vec![
+                (Keyword, "a"),
+                (ProximityOp, "(sen)"),
+                (Keyword, "b"),
+            ]
+        );
+        let result = lex("a (SEN) b");
+        assert_eq!(
+            result,
+            vec![
+                (Keyword, "a"),
+                (ProximityOp, "(SEN)"),
                 (Keyword, "b"),
             ]
         );

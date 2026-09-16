@@ -289,11 +289,13 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
 const OPERAND_OFFSET: usize = 4;
 
 /// Spaces to emit after a continuation operator so that the operand behind it
-/// lines up with the first content line (`or` → 2, `and` → 1). Operators that
-/// are already at least `OPERAND_OFFSET` columns wide (`(3w)`, `(99n)`, ...)
-/// cannot line up, so they keep a single separating space.
+/// lines up with the first content line. Operators `or` (2 columns) get 2
+/// spaces and `and` / `not` / `(s)` (3 columns) get 1; operators that are
+/// already `OPERAND_OFFSET` columns wide (`(3w)`) or wider (`(sen)`, `(99n)`)
+/// are followed directly by the operand's parenthesis — no space — so the
+/// parentheses around the connected fragments line up as closely as possible.
 fn spaces_after_continuation_op(op: &str) -> usize {
-    OPERAND_OFFSET.saturating_sub(op.chars().count()).max(1)
+    OPERAND_OFFSET.saturating_sub(op.chars().count())
 }
 
 fn gen_not(expr: &NotExpr, ctx: &Context) -> PrintItems {
