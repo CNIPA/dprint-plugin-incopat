@@ -501,18 +501,12 @@ fn gen_comparison_range(expr: &ComparisonRangeExpr, ctx: &Context) -> PrintItems
     items
 }
 
-/// Whether a proximity operator is the same-sentence `(s)` / same-paragraph
-/// `(p)` operator (mirrors the normalizer's classification).
-fn is_sentence_para_op(op: &str) -> bool {
-    let normalized = op.trim_matches(['(', ')']).to_ascii_lowercase();
-    normalized == "s" || normalized == "p"
-}
-
 fn gen_proximity(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
-    // Inside a field value the `(s)` / `(p)` fragments are rendered as
-    // parenthesized blocks so the operator stays visible when the value wraps.
-    if ctx.in_field_body && is_sentence_para_op(&expr.op) {
-        return gen_sentence_para_proximity(expr, ctx);
+    // Inside a field value the fragments on both sides of a proximity operator
+    // are rendered as parenthesized blocks so the operator stays visible when
+    // the value wraps.
+    if ctx.in_field_body {
+        return gen_proximity_chain(expr, ctx);
     }
 
     let mut items = PrintItems::new();
@@ -524,13 +518,13 @@ fn gen_proximity(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
     items
 }
 
-/// Generate IR for a `(s)` / `(p)` proximity expression inside a field value.
+/// Generate IR for a proximity expression (`(s)`, `(p)`, `(Nw)`, `(Nn)`) inside
+/// a field value.
 ///
 /// The two fragments are parenthesized blocks sitting in the field value's
 /// content column. They stay on one line with the operator when everything
 /// fits (`(fragment) (s) (fragment)`). Otherwise the operator starts its own
-/// line, right-justified in front of the second block, so both blocks'
-/// parentheses line up:
+/// line, in the continuation column, so both blocks' parentheses line up:
 ///
 /// ```text
 /// (
@@ -541,7 +535,7 @@ fn gen_proximity(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
 ///         fragment ...
 /// )
 /// ```
-fn gen_sentence_para_proximity(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
+fn gen_proximity_chain(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
     let block_col = 8 * ctx.depth + 8;
     let continuation_indent = 8 * ctx.depth + 4;
     let mut items = PrintItems::new();
@@ -888,7 +882,7 @@ mod tests {
 
     #[test]
     fn proximity_operator() {
-        assert_eq!(format("data (2w) line"), "data (2w) line\n");
+        assert_eq!(format("data (2w) line"), "(data) (2w) (line)\n");
     }
 
     #[test]

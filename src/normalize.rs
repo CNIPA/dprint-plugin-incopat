@@ -206,14 +206,6 @@ fn needs_wrap(expr: &QueryExpr) -> bool {
     parts.len() >= 2
 }
 
-/// Whether a proximity operator is the same-sentence `(s)` or same-paragraph
-/// `(p)` operator. The fragments on both sides of these operators are
-/// treated as independent value fragments.
-fn is_sentence_para_op(op: &str) -> bool {
-    let normalized = op.trim_matches(['(', ')']).to_ascii_lowercase();
-    normalized == "s" || normalized == "p"
-}
-
 /// Wrap an atomic value fragment in parentheses (e.g. so synonyms can be
 /// listed next to it). Compound expressions and self-delimiting ranges keep
 /// their own structure.
@@ -364,12 +356,10 @@ fn collapse_parens(expr: &QueryExpr) -> QueryExpr {
         QueryExpr::Proximity(p) => {
             let left_c = collapse_parens(&p.left);
             let right_c = collapse_parens(&p.right);
-            // 同句 (s) / 同段 (p) 运算符前后的值片断也加括号,方便并列近义词。
-            let (left_c, right_c) = if is_sentence_para_op(&p.op) {
-                (wrap_fragment(left_c), wrap_fragment(right_c))
-            } else {
-                (left_c, right_c)
-            };
+            // 邻近运算符(同句 (s)、同段 (p)、词距 (Nw)/(Nn))前后的值片断都加括号,
+            // 既方便并列近义词,也让格式化后两侧片断成块、运算符单独可见。
+            let left_c = wrap_fragment(left_c);
+            let right_c = wrap_fragment(right_c);
             QueryExpr::Proximity(ProximityExpr {
                 left: Box::new(left_c),
                 op: p.op.clone(),
@@ -822,9 +812,10 @@ mod tests {
     }
 
     #[test]
-    fn word_op_fragments_not_wrapped() {
-        assert_eq!(format("data (2w) line"), "data (2w) line\n");
-        assert_eq!(format("data (3n) line"), "data (3n) line\n");
+    fn word_op_fragments_wrapped() {
+        // 词距运算符 (Nw)/(Nn) 的两侧片断与 (s)/(p) 一样加括号
+        assert_eq!(format("data (2w) line"), "(data) (2w) (line)\n");
+        assert_eq!(format("data (3n) line"), "(data) (3n) (line)\n");
     }
 
     #[test]
