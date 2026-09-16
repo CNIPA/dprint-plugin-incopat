@@ -50,13 +50,13 @@ tiabc = (
     (3w)(空调器 or 热泵机组 or 制冷系统 or 冷却塔 or 风机盘管 or 空气处理机组 or 新风机组 or 冷源)
 )
 
-== should place wide operators directly before the next fragment ==
+== should shift wide operators left so the fragments line up ==
 tiabc=((压缩机 or 冷凝器 or 蒸发器 or 节流阀 or 储液罐 or 干燥过滤器 or 气液分离器 or 油分离器) (sen) (空调器 or 热泵机组 or 制冷系统 or 冷却塔 or 风机盘管 or 空气处理机组 or 新风机组 or 冷源))
 
 [expect]
 tiabc = (
         (压缩机 or 冷凝器 or 蒸发器 or 节流阀 or 储液罐 or 干燥过滤器 or 气液分离器 or 油分离器)
-    (sen)(空调器 or 热泵机组 or 制冷系统 or 冷却塔 or 风机盘管 or 空气处理机组 or 新风机组 or 冷源)
+   (sen)(空调器 or 热泵机组 or 制冷系统 or 冷却塔 or 风机盘管 or 空气处理机组 or 新风机组 or 冷源)
 )
 
 == should keep (s) fragments with the operator when the value fits ==

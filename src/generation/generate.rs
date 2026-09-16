@@ -256,13 +256,15 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
     for part in &parts[1..] {
         items.push_signal(Signal::SpaceOrNewLine);
         if let Some(ref op) = part.op {
-            // When at start of line (broke): every operator sits in the same
-            // continuation column, followed by enough spaces to line the
-            // operand up with the first content line.
+            // When at start of line (broke): the operand behind the operator
+            // always starts in the content column, so keywords stay aligned.
+            // Operators narrower than that offset are followed by padding;
+            // wider ones (`(sen)`, `(57w)`) shift left instead.
+            let layout = continuation_op_layout(op);
             let mut true_path = PrintItems::new();
-            true_path.push_string(" ".repeat(continuation_indent));
+            true_path.push_string(" ".repeat(continuation_indent.saturating_sub(layout.shift_left)));
             true_path.push_string(op.clone());
-            true_path.push_string(" ".repeat(spaces_after_continuation_op(op)));
+            true_path.push_string(" ".repeat(layout.spaces_after));
 
             // When inline (no break): just op + space
             let mut false_path = PrintItems::new();
@@ -288,14 +290,29 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
 /// column its operands start in.
 const OPERAND_OFFSET: usize = 4;
 
-/// Spaces to emit after a continuation operator so that the operand behind it
-/// lines up with the first content line. Operators `or` (2 columns) get 2
-/// spaces and `and` / `not` / `(s)` (3 columns) get 1; operators that are
-/// already `OPERAND_OFFSET` columns wide (`(3w)`) or wider (`(sen)`, `(99n)`)
-/// are followed directly by the operand's parenthesis — no space — so the
-/// parentheses around the connected fragments line up as closely as possible.
-fn spaces_after_continuation_op(op: &str) -> usize {
-    OPERAND_OFFSET.saturating_sub(op.chars().count())
+/// How a continuation operator is laid out on a line it starts.
+struct ContinuationOpLayout {
+    /// Columns the operator starts to the left of the continuation column.
+    shift_left: usize,
+    /// Spaces between the operator and the operand behind it.
+    spaces_after: usize,
+}
+
+/// Lay out a continuation operator so that the operand behind it always starts
+/// in the content column (`OPERAND_OFFSET` columns past the continuation
+/// column) — keywords stay aligned even for wide operators.
+///
+/// Operators narrower than the offset (`or`, `and`, `(s)`) start in the
+/// continuation column and are padded (`or` → 2 spaces, `and` → 1); operators
+/// at least as wide as the offset (`(3w)`, `(sen)`, `(99n)`) are written right
+/// against the following operand, and ones wider than the offset shift left so
+/// that the parentheses around the connected fragments still line up.
+fn continuation_op_layout(op: &str) -> ContinuationOpLayout {
+    let width = op.chars().count();
+    ContinuationOpLayout {
+        shift_left: width.saturating_sub(OPERAND_OFFSET),
+        spaces_after: OPERAND_OFFSET.saturating_sub(width),
+    }
 }
 
 fn gen_not(expr: &NotExpr, ctx: &Context) -> PrintItems {
@@ -568,12 +585,14 @@ fn gen_proximity_chain(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
         },
     ));
 
-    // The operator itself: in the continuation column when it starts a line so
-    // the second block begins in the same column as the first one.
+    // The operator itself: on a line it starts it is laid out so the second
+    // block begins in the same column as the first one, whatever the width of
+    // the operator (`(s)`, `(3w)`, `(sen)`, ...).
+    let layout = continuation_op_layout(&expr.op);
     let mut op_on_new_line = PrintItems::new();
-    op_on_new_line.push_string(" ".repeat(continuation_indent));
+    op_on_new_line.push_string(" ".repeat(continuation_indent.saturating_sub(layout.shift_left)));
     op_on_new_line.push_string(expr.op.clone());
-    op_on_new_line.push_string(" ".repeat(spaces_after_continuation_op(&expr.op)));
+    op_on_new_line.push_string(" ".repeat(layout.spaces_after));
     let mut op_inline = PrintItems::new();
     op_inline.push_string(expr.op.clone());
     op_inline.push_string(" ".into());
