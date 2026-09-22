@@ -16,3 +16,28 @@ ti = (冷板 or (cold or cool) (3n) (plate or board))
 
 [expect]
 ti = (冷板 or ((cold or cool) (3n) (plate or board)))
+
+== should break the chain after a multiline proximity block ==
+ti = (冷板 or 液冷板 or 冷却板 or 水冷板 or 凉板 or 液冷散热 or (cold or cool or cooling or cooled or refrigeration or 散热 or 凉) (3n) (plates or plate or board or slab or plates or plate or board or slab) or 冷板 or 液冷板 or 冷却板 or 水冷板 or 凉板 or 液冷散热)
+
+[expect]
+ti = (
+        冷板 or 液冷板 or 冷却板 or 水冷板 or 凉板 or 液冷散热
+    or  (
+                (cold or cool or cooling or cooled or refrigeration or 散热 or 凉)
+            (3n)(plates or plate or board or slab or plates or plate or board or slab)
+        )
+    or  冷板 or 液冷板 or 冷却板 or 水冷板 or 凉板 or 液冷散热
+)
+
+== should break after a multiline proximity block at the start of a chain ==
+ti = ((cold or cool or cooling or cooled or refrigeration or 散热 or 凉 or 冷却) (3n) (plates or plate or board or slab or panel or sheet or fin) or 冷板 or 液冷板)
+
+[expect]
+ti = (
+        (
+                (cold or cool or cooling or cooled or refrigeration or 散热 or 凉 or 冷却)
+            (3n)(plates or plate or board or slab or panel or sheet or fin)
+        )
+    or  冷板 or 液冷板
+)

@@ -287,11 +287,31 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
         items.push_string(op.clone());
         items.push_string(" ".into());
     }
-    items.extend(gen_chain_operand(parts[0].expr, content_col, ctx));
+    let mut pending_block_break = gen_chain_operand_lines(parts[0].expr, content_col, ctx, &mut items);
 
     // Continuation parts with adaptive SpaceOrNewLine
     for part in &parts[1..] {
-        items.push_signal(Signal::SpaceOrNewLine);
+        // Every part after a multiline wrapped proximity block starts on its
+        // own line, so the block's closing paren is never followed by more
+        // content on the same line.
+        if let Some((start_line, end_line)) = pending_block_break.take() {
+            let mut new_line_path = PrintItems::new();
+            new_line_path.push_signal(Signal::NewLine);
+            items.push_condition(Condition::new(
+                "breakAfterWrappedBlock",
+                ConditionProperties {
+                    condition: Rc::new(move |context| {
+                        let start = context.resolved_line_number(start_line)?;
+                        let end = context.resolved_line_number(end_line)?;
+                        Some(end > start)
+                    }),
+                    true_path: Some(new_line_path),
+                    false_path: Some(Signal::SpaceOrNewLine.into()),
+                },
+            ));
+        } else {
+            items.push_signal(Signal::SpaceOrNewLine);
+        }
         if let Some(ref op) = part.op {
             // When at start of line (broke): the operand behind the operator
             // always starts in the content column, so keywords stay aligned.
@@ -317,7 +337,7 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
                 },
             ));
         }
-        items.extend(gen_chain_operand(part.expr, content_col, ctx));
+        pending_block_break = gen_chain_operand_lines(part.expr, content_col, ctx, &mut items);
     }
 
     items
@@ -331,6 +351,27 @@ fn gen_chain_operand(expr: &QueryExpr, content_col: usize, ctx: &Context) -> Pri
         QueryExpr::Proximity(_) => gen_block(expr, content_col, ctx),
         other => gen_expr(other, ctx),
     }
+}
+
+/// Render one operand and, for a wrapped proximity block, record the line
+/// numbers around it so the following operand can be pushed onto its own line
+/// when the block spans several lines.
+fn gen_chain_operand_lines(
+    expr: &QueryExpr,
+    content_col: usize,
+    ctx: &Context,
+    items: &mut PrintItems,
+) -> Option<(LineNumber, LineNumber)> {
+    if !matches!(expr, QueryExpr::Proximity(_)) {
+        items.extend(gen_chain_operand(expr, content_col, ctx));
+        return None;
+    }
+    let start_line = LineNumber::new("chainBlockStartLine");
+    items.push_info(Info::LineNumber(start_line));
+    items.extend(gen_chain_operand(expr, content_col, ctx));
+    let end_line = LineNumber::new("chainBlockEndLine");
+    items.push_info(Info::LineNumber(end_line));
+    Some((start_line, end_line))
 }
 
 /// Columns between the continuation-operator column of a wrapped chain and the
