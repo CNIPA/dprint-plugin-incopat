@@ -194,11 +194,14 @@ impl<'a> Lexer<'a> {
 
         // Try to match proximity/frequency operator pattern
         let mut digit_count = 0;
+        let mut digits = String::new();
 
-        // Read optional digits (0-2)
-        while digit_count < 2 {
+        // Read optional digits: the frequency operator accepts 1-100 (`(100f)`),
+        // the proximity operators 0-99.
+        while digit_count < 3 {
             if let Some(&(_, ch)) = self.chars.get(self.pos) {
                 if ch.is_ascii_digit() {
+                    digits.push(ch);
                     self.pos += 1;
                     digit_count += 1;
                 } else {
@@ -221,10 +224,15 @@ impl<'a> Lexer<'a> {
             }
         }
         let letters = self.source[letters_start..self.byte_pos()].to_ascii_lowercase();
-        let is_operator = if digit_count == 0 {
-            matches!(letters.as_str(), "w" | "n" | "s" | "p" | "f" | "sen")
-        } else {
-            matches!(letters.as_str(), "w" | "n" | "s" | "p" | "f")
+        let number = digits.parse::<u32>().ok();
+        let is_operator = match letters.as_str() {
+            // Frequency: (nf) with n = 1~100.
+            "f" => number.map(|n| (1..=100).contains(&n)).unwrap_or(false),
+            // Proximity: (Nw) / (Nn) with N = 0~99, or the bare letters.
+            "w" | "n" | "s" | "p" => digits.len() <= 2,
+            // Same-sentence alias `(sen)`.
+            "sen" => digit_count == 0,
+            _ => false,
         };
         if is_operator {
             // Check for closing ')'
@@ -289,6 +297,7 @@ impl<'a> Lexer<'a> {
             "AND" => Token::new(TokenKind::And, Span::new(byte_start, byte_end)),
             "OR" => Token::new(TokenKind::Or, Span::new(byte_start, byte_end)),
             "NOT" => Token::new(TokenKind::Not, Span::new(byte_start, byte_end)),
+            "OPT" => Token::new(TokenKind::Opt, Span::new(byte_start, byte_end)),
             "TO" => Token::new(TokenKind::To, Span::new(byte_start, byte_end)),
             _ => Token::new(TokenKind::Keyword, Span::new(byte_start, byte_end)),
         }
@@ -564,6 +573,48 @@ mod tests {
                 (QuotedString, "\"机器人\""),
                 (FrequencyOp, "(3f)"),
             ]
+        );
+    }
+
+    #[test]
+    fn frequency_operator_up_to_100() {
+        // 官方规则:n 为 1~100 的整数
+        let result = lex("a (100f)");
+        assert_eq!(result, vec![(Keyword, "a"), (FrequencyOp, "(100f)")]);
+        // 超出范围或缺少数字的不是频率算符
+        let result = lex("a (101f)");
+        assert_eq!(
+            result,
+            vec![
+                (Keyword, "a"),
+                (LParen, "("),
+                (Keyword, "101f"),
+                (RParen, ")"),
+            ]
+        );
+        let result = lex("a (0f)");
+        assert_eq!(
+            result,
+            vec![
+                (Keyword, "a"),
+                (LParen, "("),
+                (Keyword, "0f"),
+                (RParen, ")"),
+            ]
+        );
+    }
+
+    #[test]
+    fn optional_operator() {
+        let result = lex("a OPT b");
+        assert_eq!(
+            result,
+            vec![(Keyword, "a"), (Opt, "OPT"), (Keyword, "b")]
+        );
+        let result = lex("a opt b");
+        assert_eq!(
+            result,
+            vec![(Keyword, "a"), (Opt, "opt"), (Keyword, "b")]
         );
     }
 

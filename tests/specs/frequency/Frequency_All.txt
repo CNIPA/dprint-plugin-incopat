@@ -1,0 +1,30 @@
+-- /file.incopat --
+== should support a frequency up to 100 ==
+tiab=("机器人"(100f))
+
+[expect]
+tiab = (("机器人") (100f))
+
+== should support frequency operators combined with boolean operators ==
+tiabc=("机器人"(3f) AND "遥感"(3f))
+
+[expect]
+tiabc = (("机器人") (3f) and ("遥感") (3f))
+
+== should support a frequency operator on a nested logical expression ==
+des=((机器人 OR 红外)(3f))
+
+[expect]
+des = ((机器人 or 红外) (3f))
+
+== should keep the relation of a frequency on a proximity expression ==
+ti=((clectronic(3n)vehicle)(3f))
+
+[expect]
+ti = (((clectronic) (3n) (vehicle)) (3f))
+
+== should keep a frequency on an expression inside a field value ==
+(ti=机器人)(3f)
+
+[expect]
+ti = ((机器人) (3f))

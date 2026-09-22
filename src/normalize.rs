@@ -42,6 +42,7 @@ fn semantic_in(expr: &QueryExpr) -> bool {
         },
         QueryExpr::Proximity(p) => semantic_in(&p.left) || semantic_in(&p.right),
         QueryExpr::Frequency(f) => semantic_in(&f.operand),
+        QueryExpr::Optional(o) => semantic_in(&o.left) || semantic_in(&o.right),
         QueryExpr::TreeAt(t) => semantic_in(&t.operand),
         _ => false,
     }
@@ -188,6 +189,12 @@ fn extract_r(expr: &QueryExpr) -> Result<(Option<QueryExpr>, Option<SemanticSear
             }
             Ok((Some(expr.clone()), None))
         }
+        QueryExpr::Optional(o) => {
+            if semantic_in(&o.left) || semantic_in(&o.right) {
+                return Err("语义检索字段 (R/RAD/RPD) 不能与可选运算符 OPT 连用".to_string());
+            }
+            Ok((Some(expr.clone()), None))
+        }
         QueryExpr::TreeAt(t) => {
             if semantic_in(&t.operand) {
                 return Err("语义检索字段 (R/RAD/RPD) 不能用于公司树运算符".to_string());
@@ -221,6 +228,113 @@ fn wrap_fragment(expr: QueryExpr) -> QueryExpr {
             inner: Box::new(other),
             rparen_span: Span::new(0, 0),
         }),
+    }
+}
+
+/// Wrap the operand of a frequency operator. Atomic values get parentheses so
+/// synonyms can be listed next to them, and relations (proximity / boolean)
+/// keep their own parentheses so `(Nf)` still applies to the whole relation
+/// instead of only to the value directly in front of it.
+fn wrap_frequency_operand(expr: QueryExpr) -> QueryExpr {
+    match expr {
+        // Already delimited, or nesting that stays as written.
+        QueryExpr::Group(_)
+        | QueryExpr::BracketRange(_)
+        | QueryExpr::ComparisonRange(_)
+        | QueryExpr::Frequency(_) => expr,
+        QueryExpr::Proximity(_) | QueryExpr::Binary(_) | QueryExpr::Not(_) => {
+            QueryExpr::Group(GroupExpr {
+                lparen_span: Span::new(0, 0),
+                inner: Box::new(expr),
+                rparen_span: Span::new(0, 0),
+            })
+        }
+        other => wrap_fragment(other),
+    }
+}
+
+/// Ensure `expr` is parenthesized, keeping an existing group as is.
+fn ensure_group(expr: QueryExpr) -> QueryExpr {
+    match expr {
+        QueryExpr::Group(_) => expr,
+        other => QueryExpr::Group(GroupExpr {
+            lparen_span: Span::new(0, 0),
+            inner: Box::new(other),
+            rparen_span: Span::new(0, 0),
+        }),
+    }
+}
+
+/// Whether the subtree contains an optional (`OPT`) expression.
+fn contains_optional(expr: &QueryExpr) -> bool {
+    match expr {
+        QueryExpr::Optional(_) => true,
+        QueryExpr::Binary(b) => contains_optional(&b.left) || contains_optional(&b.right),
+        QueryExpr::Not(n) => contains_optional(&n.operand),
+        QueryExpr::Group(g) => contains_optional(&g.inner),
+        QueryExpr::Field(f) => match &f.body {
+            FieldBody::Simple(inner) => contains_optional(inner),
+            FieldBody::Parenthesized { inner, .. } => contains_optional(inner),
+        },
+        QueryExpr::Proximity(p) => contains_optional(&p.left) || contains_optional(&p.right),
+        QueryExpr::Frequency(f) => contains_optional(&f.operand),
+        QueryExpr::TreeAt(t) => contains_optional(&t.operand),
+        _ => false,
+    }
+}
+
+/// The elements listed after `OPT` may only be joined by `or`: no `and` /
+/// `not`, no proximity or frequency relations, and no nesting.
+fn optional_side_violation(expr: &QueryExpr) -> Option<String> {
+    const ONLY_OR: &str = "可选运算符 OPT 限定的检索要素之间只能用 or 连接";
+    match expr {
+        QueryExpr::Optional(_) => Some("可选运算符 OPT 不支持嵌套使用".to_string()),
+        QueryExpr::Binary(b) if b.op == BoolOp::And => Some(ONLY_OR.to_string()),
+        QueryExpr::Not(_) => Some(ONLY_OR.to_string()),
+        QueryExpr::Proximity(_) => Some("可选运算符 OPT 内不支持邻近运算符".to_string()),
+        QueryExpr::Frequency(_) => Some("可选运算符 OPT 内不支持频率运算符".to_string()),
+        QueryExpr::Binary(b) => {
+            optional_side_violation(&b.left).or_else(|| optional_side_violation(&b.right))
+        }
+        QueryExpr::Group(g) => optional_side_violation(&g.inner),
+        QueryExpr::Field(f) => match &f.body {
+            FieldBody::Simple(inner) => optional_side_violation(inner),
+            FieldBody::Parenthesized { inner, .. } => optional_side_violation(inner),
+        },
+        _ => None,
+    }
+}
+
+/// Enforce the optional operator (`OPT`) rules on the whole tree.
+fn validate_optional(expr: &QueryExpr) -> Result<(), String> {
+    match expr {
+        QueryExpr::Optional(o) => {
+            if contains_optional(&o.left) || contains_optional(&o.right) {
+                return Err("可选运算符 OPT 不支持嵌套使用".to_string());
+            }
+            if let Some(message) = optional_side_violation(&o.right) {
+                return Err(message);
+            }
+            validate_optional(&o.left)?;
+            validate_optional(&o.right)
+        }
+        QueryExpr::Binary(b) => {
+            validate_optional(&b.left)?;
+            validate_optional(&b.right)
+        }
+        QueryExpr::Not(n) => validate_optional(&n.operand),
+        QueryExpr::Group(g) => validate_optional(&g.inner),
+        QueryExpr::Field(f) => match &f.body {
+            FieldBody::Simple(inner) => validate_optional(inner),
+            FieldBody::Parenthesized { inner, .. } => validate_optional(inner),
+        },
+        QueryExpr::Proximity(p) => {
+            validate_optional(&p.left)?;
+            validate_optional(&p.right)
+        }
+        QueryExpr::Frequency(f) => validate_optional(&f.operand),
+        QueryExpr::TreeAt(t) => validate_optional(&t.operand),
+        _ => Ok(()),
     }
 }
 
@@ -300,6 +414,7 @@ pub fn normalize_query(expr: &QueryExpr) -> Result<QueryExpr, String> {
     // Collapse redundant parentheses and normalize field values first so the
     // semantic rules see a clean tree.
     let collapsed = collapse_parens(expr);
+    validate_optional(&collapsed)?;
     let (rest, r) = extract_r(&collapsed)?;
     let Some(r) = r else {
         return Ok(wrap_top_level(collapsed));
@@ -375,7 +490,7 @@ fn collapse_parens(expr: &QueryExpr) -> QueryExpr {
                 return collapse_parens(&move_frequency_into_field(fe, &f.op, f.op_span));
             }
             QueryExpr::Frequency(FrequencyExpr {
-                operand: Box::new(wrap_fragment(operand_c)),
+                operand: Box::new(wrap_frequency_operand(operand_c)),
                 op: f.op.clone(),
                 op_span: f.op_span,
             })
@@ -384,6 +499,22 @@ fn collapse_parens(expr: &QueryExpr) -> QueryExpr {
             tree_at_span: t.tree_at_span,
             operand: Box::new(collapse_parens(&t.operand)),
         }),
+        QueryExpr::Optional(o) => {
+            let left = collapse_parens(&o.left);
+            let right = collapse_parens(&o.right);
+            // The required condition keeps its parentheses when it lists several
+            // elements; the optional elements are always parenthesized.
+            let left = if needs_wrap(&left) {
+                ensure_group(left)
+            } else {
+                left
+            };
+            QueryExpr::Optional(OptionalExpr {
+                left: Box::new(left),
+                opt_span: o.opt_span,
+                right: Box::new(ensure_group(right)),
+            })
+        }
         other => other.clone(),
     }
 }
@@ -636,6 +767,79 @@ mod tests {
     fn r_under_proximity_errors() {
         let msg = format_err("R = (a) (2w) 空调");
         assert!(msg.contains("邻近运算符"), "unexpected: {}", msg);
+    }
+
+    // ── Optional operator (OPT) ──
+
+    #[test]
+    fn optional_operator_requires_parentheses() {
+        assert_eq!(
+            format("ti=(毛衣) and pd=[20200101 to 20241231] OPT ab=编织"),
+            "(\n        ti = (毛衣)\n    and pd = [20200101 to 20241231]\n)\nOPT (ab = (编织))\n"
+        );
+        assert_eq!(
+            format("ti=(毛衣) OPT (ab=(编织 or 针织))"),
+            "ti = (毛衣)\nOPT (ab = (编织 or 针织))\n"
+        );
+        assert_eq!(
+            format("ti=(毛衣) OPT (ab=编织 or 针织)"),
+            "ti = (毛衣)\nOPT (\n        ab = (编织)\n     or 针织\n)\n"
+        );
+    }
+
+    #[test]
+    fn optional_operator_with_r_errors() {
+        let msg = format_err("R = (缝合) OPT (ab=编织)");
+        assert!(msg.contains("不能与可选运算符 OPT 连用"), "unexpected: {}", msg);
+    }
+
+    #[test]
+    fn optional_side_only_allows_or() {
+        let msg = format_err("ti=(毛衣) OPT (ab=(编织 and 针织))");
+        assert!(msg.contains("只能用 or 连接"), "unexpected: {}", msg);
+        let msg = format_err("ti=(毛衣) OPT (ab=(编织 not 针织))");
+        assert!(msg.contains("只能用 or 连接"), "unexpected: {}", msg);
+    }
+
+    #[test]
+    fn optional_operator_does_not_nest() {
+        let msg = format_err("(ti=x) OPT ((ab=y) OPT (cd=z))");
+        assert!(msg.contains("不支持嵌套使用"), "unexpected: {}", msg);
+    }
+
+    #[test]
+    fn optional_side_rejects_relations() {
+        let msg = format_err("ti=(毛衣) OPT (ab=(编织 (3n) 针织))");
+        assert!(msg.contains("不支持邻近运算符"), "unexpected: {}", msg);
+        let msg = format_err("ti=(毛衣) OPT ((ab=(编织)) (3f))");
+        assert!(msg.contains("不支持频率运算符"), "unexpected: {}", msg);
+    }
+
+    // ── Frequency operator forms ──
+
+    #[test]
+    fn frequency_up_to_100_recognized() {
+        assert_eq!(format("tiab=(\"机器人\"(100f))"), "tiab = ((\"机器人\") (100f))\n");
+    }
+
+    #[test]
+    fn frequency_combines_with_boolean_operators() {
+        assert_eq!(
+            format("tiabc=(\"机器人\"(3f) AND \"遥感\"(3f))"),
+            "tiabc = ((\"机器人\") (3f) and (\"遥感\") (3f))\n"
+        );
+    }
+
+    #[test]
+    fn frequency_on_group_and_relation() {
+        assert_eq!(
+            format("des=((机器人 OR 红外)(3f))"),
+            "des = ((机器人 or 红外) (3f))\n"
+        );
+        assert_eq!(
+            format("ti=((clectronic(3n)vehicle)(3f))"),
+            "ti = (((clectronic) (3n) (vehicle)) (3f))\n"
+        );
     }
 
     // ── Misc ──

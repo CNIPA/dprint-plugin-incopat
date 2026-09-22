@@ -1,0 +1,18 @@
+-- /file.incopat --
+== should wrap a proximity expression inside a chain ==
+ti = (冷板 or 液冷板 or 冷却板 or 水冷板 or 凉板 or 液冷散热 or (cold or cool or cooling or cooled or refrigeration or 散热 or 凉 or 冷却 or 制冷) (3n) (plates or plate or board or slab or panel or sheet or fin))
+
+[expect]
+ti = (
+        冷板 or 液冷板 or 冷却板 or 水冷板 or 凉板 or 液冷散热
+    or  (
+                (cold or cool or cooling or cooled or refrigeration or 散热 or 凉 or 冷却 or 制冷)
+            (3n)(plates or plate or board or slab or panel or sheet or fin)
+        )
+)
+
+== should keep a wrapped proximity expression inline when it fits ==
+ti = (冷板 or (cold or cool) (3n) (plate or board))
+
+[expect]
+ti = (冷板 or ((cold or cool) (3n) (plate or board)))

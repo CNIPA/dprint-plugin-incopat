@@ -32,6 +32,7 @@ pub struct Parser<'a> {
 }
 
 /// Operator precedence levels (higher = binds tighter).
+const PREC_OPT: u8 = 0;
 const PREC_OR: u8 = 1;
 const PREC_AND: u8 = 2;
 const PREC_PROXIMITY: u8 = 4;
@@ -92,6 +93,10 @@ impl<'a> Parser<'a> {
 
     fn parse_query_expr(&mut self, min_prec: u8) -> Option<QueryExpr> {
         let mut left = self.parse_prefix()?;
+        // A frequency operator binds to the atom directly in front of it and
+        // binds tighter than any boolean or proximity operator, so it has to be
+        // taken here to allow forms like `"a"(3f) AND "b"(3f)`.
+        left = self.parse_frequency_postfix(left);
 
         loop {
             let saved = self.pos;
@@ -127,6 +132,11 @@ impl<'a> Parser<'a> {
                         op_span,
                         right: Box::new(right),
                     }),
+                    InfixOp::Optional => QueryExpr::Optional(OptionalExpr {
+                        left: Box::new(left),
+                        opt_span: op_span,
+                        right: Box::new(right),
+                    }),
                 };
             } else {
                 // Check for implicit AND
@@ -155,17 +165,21 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Check for frequency operator (postfix)
-        if self.peek_kind() == TokenKind::FrequencyOp {
+        Some(left)
+    }
+
+    /// Apply any frequency operators directly following `expr` (e.g. `(3f)`).
+    fn parse_frequency_postfix(&mut self, expr: QueryExpr) -> QueryExpr {
+        let mut result = expr;
+        while self.peek_kind() == TokenKind::FrequencyOp {
             let tok = self.advance();
-            left = QueryExpr::Frequency(FrequencyExpr {
-                operand: Box::new(left),
+            result = QueryExpr::Frequency(FrequencyExpr {
+                operand: Box::new(result),
                 op: tok.text(self.source).to_string(),
                 op_span: tok.span,
             });
         }
-
-        Some(left)
+        result
     }
 
     fn parse_prefix(&mut self) -> Option<QueryExpr> {
@@ -610,6 +624,7 @@ impl<'a> Parser<'a> {
     fn peek_infix_op(&self) -> Option<(InfixOp, u8, Span)> {
         let tok = self.peek_token();
         match &tok.kind {
+            TokenKind::Opt => Some((InfixOp::Optional, PREC_OPT, tok.span)),
             TokenKind::And => Some((InfixOp::Bool(BoolOp::And), PREC_AND, tok.span)),
             TokenKind::Or => Some((InfixOp::Bool(BoolOp::Or), PREC_OR, tok.span)),
             TokenKind::ProximityOp => {
@@ -642,6 +657,8 @@ impl<'a> Parser<'a> {
 enum InfixOp {
     Bool(BoolOp),
     Proximity(String),
+    /// `OPT` — binds looser than every boolean operator.
+    Optional,
 }
 
 // ── Span helpers for QueryExpr ──
@@ -665,6 +682,7 @@ impl QueryExpr {
             QueryExpr::ComparisonRange(e) => Span::new(e.lparen_span.start, e.rparen_span.end),
             QueryExpr::Proximity(e) => Span::new(e.left.span().start, e.right.span().end),
             QueryExpr::Frequency(e) => Span::new(e.operand.span().start, e.op_span.end),
+            QueryExpr::Optional(e) => Span::new(e.left.span().start, e.right.span().end),
             QueryExpr::TreeAt(e) => Span::new(e.tree_at_span.start, e.operand.span().end),
             QueryExpr::SemanticSearch(e) => {
                 let end = match &e.body {

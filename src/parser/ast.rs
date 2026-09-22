@@ -47,6 +47,8 @@ pub enum QueryExpr {
     Proximity(ProximityExpr),
     /// Frequency expression: term (Nf).
     Frequency(FrequencyExpr),
+    /// Optional expression: (condition) OPT (optional elements).
+    Optional(OptionalExpr),
     /// TREE@ expression.
     TreeAt(TreeAtExpr),
     /// Semantic search expression: R=(value), RAD=(value), RPD=(value).
@@ -180,6 +182,16 @@ pub struct FrequencyExpr {
     pub operand: Box<QueryExpr>,
     pub op: String,
     pub op_span: Span,
+}
+
+/// Optional operator: `(conditions) OPT (optional elements)`. The left side is
+/// the required condition, the right side lists optional elements that only
+/// influence the result ranking.
+#[derive(Debug, Clone)]
+pub struct OptionalExpr {
+    pub left: Box<QueryExpr>,
+    pub opt_span: Span,
+    pub right: Box<QueryExpr>,
 }
 
 #[derive(Debug, Clone)]

@@ -53,6 +53,8 @@ pub enum TokenKind {
     Or,
     /// Boolean NOT operator.
     Not,
+    /// Optional operator `OPT`.
+    Opt,
     /// Range keyword `to`.
     To,
     /// Proximity operator: (Nw), (Nn), (s), (p).

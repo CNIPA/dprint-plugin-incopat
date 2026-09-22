@@ -38,6 +38,7 @@ pub fn generate(file: &File, ctx: &Context) -> PrintItems {
 fn gen_query(expr: &QueryExpr, ctx: &Context) -> PrintItems {
     match expr {
         QueryExpr::Binary(_) => gen_top_level_binary(expr, ctx),
+        QueryExpr::Optional(o) => gen_optional(o, ctx),
         QueryExpr::Not(n) => {
             let mut items = PrintItems::new();
             items.push_string(format_not_op(&n.op_span, ctx));
@@ -47,6 +48,29 @@ fn gen_query(expr: &QueryExpr, ctx: &Context) -> PrintItems {
         }
         _ => gen_expr(expr, ctx),
     }
+}
+
+/// Generate IR for a top-level optional expression: the required condition
+/// keeps its own layout, then `OPT` introduces the parenthesized optional
+/// elements on their own lines.
+///
+/// ```text
+/// (
+///         ti = (毛衣)
+///     and pd = [20100101 to 20250315]
+/// )
+/// OPT (
+///         ab = (编织)
+/// )
+/// ```
+fn gen_optional(expr: &OptionalExpr, ctx: &Context) -> PrintItems {
+    let mut items = PrintItems::new();
+    items.extend(gen_query(&expr.left, ctx));
+    items.push_signal(Signal::NewLine);
+    items.push_string(format_opt_op(&expr.opt_span, ctx));
+    items.push_string(" ".into());
+    items.extend(gen_query(&expr.right, ctx));
+    items
 }
 
 // ── Flat part for binary chain flattening ──
@@ -204,6 +228,17 @@ fn gen_expr(expr: &QueryExpr, ctx: &Context) -> PrintItems {
         QueryExpr::ComparisonRange(c) => gen_comparison_range(c, ctx),
         QueryExpr::Proximity(p) => gen_proximity(p, ctx),
         QueryExpr::Frequency(f) => gen_frequency(f, ctx),
+        QueryExpr::Optional(o) => {
+            // Nested optional expressions are rejected by the normalizer; keep
+            // a plain inline rendering for safety.
+            let mut items = PrintItems::new();
+            items.extend(gen_expr(&o.left, ctx));
+            items.push_string(" ".into());
+            items.push_string(format_opt_op(&o.opt_span, ctx));
+            items.push_string(" ".into());
+            items.extend(gen_expr(&o.right, ctx));
+            items
+        }
         QueryExpr::TreeAt(t) => gen_tree_at(t, ctx),
         QueryExpr::SemanticSearch(s) => gen_semantic_search(s, ctx),
         QueryExpr::Error(e) => gen_error(e),
@@ -230,11 +265,13 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
     let align_width = calc_align_width(&parts);
     // Wrapped field-value chains are indented 4 columns past the column the
     // value's closing paren sits in: the field's own start column, or the
-    // column of the enclosing wrapped block inside a value.
+    // column of the enclosing wrapped block inside a value. Operands start
+    // OPERAND_OFFSET columns further right.
     let continuation_indent = match ctx.block_close_col {
         Some(close_col) => close_col + 4,
         None => 8 * ctx.depth + 4,
     };
+    let content_col = continuation_indent + OPERAND_OFFSET;
     let mut items = PrintItems::new();
 
     // First operand — add alignment padding only when already at start of line
@@ -250,7 +287,7 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
         items.push_string(op.clone());
         items.push_string(" ".into());
     }
-    items.extend(gen_expr(parts[0].expr, ctx));
+    items.extend(gen_chain_operand(parts[0].expr, content_col, ctx));
 
     // Continuation parts with adaptive SpaceOrNewLine
     for part in &parts[1..] {
@@ -280,10 +317,20 @@ fn gen_inner_binary_chain(expr: &QueryExpr, ctx: &Context) -> PrintItems {
                 },
             ));
         }
-        items.extend(gen_expr(part.expr, ctx));
+        items.extend(gen_chain_operand(part.expr, content_col, ctx));
     }
 
     items
+}
+
+/// Render one operand of an inner binary chain. A proximity expression is
+/// wrapped in parentheses so the relation it forms stays visible as one block
+/// (`((a or b) (3n)(c or d))`), everything else renders as usual.
+fn gen_chain_operand(expr: &QueryExpr, content_col: usize, ctx: &Context) -> PrintItems {
+    match expr {
+        QueryExpr::Proximity(_) => gen_block(expr, content_col, ctx),
+        other => gen_expr(other, ctx),
+    }
 }
 
 /// Columns between the continuation-operator column of a wrapped chain and the
@@ -319,6 +366,13 @@ fn gen_not(expr: &NotExpr, ctx: &Context) -> PrintItems {
     let mut items = PrintItems::new();
     items.push_string(format_not_op(&expr.op_span, ctx));
     items.push_string(" ".into());
+    // A negated proximity expression keeps its own parentheses.
+    if ctx.in_field_body {
+        if let QueryExpr::Proximity(_) = expr.operand.as_ref() {
+            items.extend(gen_block(&expr.operand, 8 * ctx.depth + 8, ctx));
+            return items;
+        }
+    }
     items.extend(gen_expr(&expr.operand, ctx));
     items
 }
@@ -388,6 +442,14 @@ fn gen_field(expr: &FieldExpr, ctx: &Context) -> PrintItems {
 }
 
 fn gen_group(expr: &GroupExpr, ctx: &Context) -> PrintItems {
+    // A parenthesized proximity expression inside a field value is rendered as
+    // an indented block, the same way the generator wraps a bare one.
+    if ctx.in_field_body {
+        if let QueryExpr::Proximity(_) = expr.inner.as_ref() {
+            return gen_block(&expr.inner, 8 * ctx.depth + 8, ctx);
+        }
+    }
+
     let mut items = PrintItems::new();
     items.push_string("(".into());
 
@@ -555,8 +617,13 @@ fn gen_proximity(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
 /// )
 /// ```
 fn gen_proximity_chain(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
-    let block_col = 8 * ctx.depth + 8;
-    let continuation_indent = 8 * ctx.depth + 4;
+    // The fragments sit in the content column of the field value, or of the
+    // enclosing wrapped block (when the whole relation is itself parenthesized).
+    let block_col = match ctx.block_close_col {
+        Some(close_col) => close_col + 8,
+        None => 8 * ctx.depth + 8,
+    };
+    let continuation_indent = block_col - OPERAND_OFFSET;
     let mut items = PrintItems::new();
 
     // Remember the line the first fragment starts on so a wrapped first
@@ -743,6 +810,14 @@ fn format_bool_op(op: BoolOp, op_span: &Span, ctx: &Context) -> String {
         BoolOp::Or => "or",
     };
     format_case(text, ctx.config.boolean_operator_case)
+}
+
+/// Preserve the case of the `OPT` keyword as written (`opt`/`OPT`).
+fn format_opt_op(opt_span: &Span, ctx: &Context) -> String {
+    if opt_span.len() > 0 {
+        return ctx.source[opt_span.start..opt_span.end].to_string();
+    }
+    "OPT".to_string()
 }
 
 fn format_not_op(not_span: &Span, ctx: &Context) -> String {
