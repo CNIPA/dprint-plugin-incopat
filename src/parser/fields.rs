@@ -1,5 +1,16 @@
 /// Complete lookup table of all known incoPat searchable field codes.
-/// Extracted from the official incoPat help documentation.
+///
+/// 来源：官方《原始字段代码说明》<https://www.incopat.com/help/sysdoc/helpcode.html>（需登录）。
+/// 2026-09-22 由维护者下载页面后逐条核对，共 **474** 个，与 Vim 插件
+/// `incoPatSearchCriteria` 的 `scKEY` 白名单完全一致。
+///
+/// 两组已经实测确认的例外，**不要再反复核实**，详见 `docs/field-code-notes.md`：
+///
+/// - **保留**：`APNORTT` / `AEENORTT` / `PATENTEENORTT`（数据库实测可用），
+///   以及 8 个页面上看不到的 `PHC` 和 `*-DC`（它们只写在页面 HTML 注释里，渲染不出来）。
+/// - **已删除，不要加回来**：`FIRST-CLAIM-OR` / `FIRST-CLAIM-TS` /
+///   `IN-OR-ADD` / `IN-ADD-OTH`（数据库实测报「找不到该字段」）。
+///
 /// All comparisons should be case-insensitive.
 
 const FIELD_CODES: &[&str] = &[
@@ -12,10 +23,10 @@ const FIELD_CODES: &[&str] = &[
     "USE-DWPI", "ADV-DWPI", "NOVELTY-DWPI", "ABSTRACT-DWPI",
     "DTD-DWPI", "ACTIVITY-DWPI", "MEC-DWPI", "FOC-DWPI", "DRAW-DWPI",
     "TIAB", "TIAB-DWPI",
-    "CLAIM", "FIRST-CLAIM", "FIRST-CLAIM-OR",
+    "CLAIM", "FIRST-CLAIM",
     "INDEPCLAIMS-CN", "DEPCLAIMS-CN",
     "NO-INDEPCLAIMS", "NO-DEPCLAIMS",
-    "FIRST-CLAIM-TS", "LEN-FIRST-CLAIM",
+    "LEN-FIRST-CLAIM",
     "CLAIM-EN", "CLAIM-CN", "CLAIM-OT", "NO-CLAIM",
     "TIABC",
     "DES", "DES-OT", "DES-EN", "DES-CN",
@@ -101,7 +112,7 @@ const FIELD_CODES: &[&str] = &[
     "AP-PROVINCE", "PC-CN", "AP-PC",
     "CITY", "COUNTY",
     "PATENTEE-ADD", "PATENTEE-PROVINCE", "PATENTEE-CITY", "PATENTEE-COUNTY",
-    "IN-ADD", "IN-ADD-OTH", "IN-OR-ADD",
+    "IN-ADD",
     "IN-CITY", "IN-STATE",
     "ASSIGN-COUNTRY", "ASSIGNEE-ADD", "ASSIGNEE-CADD",
     "ASSIGN-STATE", "ASSIGN-CITY",
@@ -194,6 +205,16 @@ const FIELD_CODES: &[&str] = &[
     // === Other/miscellaneous fields ===
     "DOC-DC",
     "RAND-DWPI",
+
+    // === 2026-09-22 与官方《原始字段代码说明》核对时补入 ===
+    // 这些字段在官方页面上看不到（部分只写在页面 HTML 注释里，渲染不出来），
+    // 但数据库实测均不报「不支持的字段」，故保留。
+    "IN-DWPI",
+    "AP-ORADD", "AP-TSADD",
+    "IN-ORADD", "IN-OTADD", "IN-TSADD",
+    "FIRST-CLAIM-CN", "FIRST-CLAIM-EN", "FIRST-CLAIM-OT",
+    "PHC",
+    "CHANGE-DC", "FAM-DC", "CP-DC", "FC-DC", "CN-DC", "REF-DC", "CUSTOMS-DC",
 ];
 
 /// Semantic search keywords that also function as field codes.
@@ -283,5 +304,36 @@ mod tests {
         assert!(!is_field_code("hello"));
         assert!(!is_field_code("AND"));
         assert!(!is_field_code("OR"));
+    }
+
+    /// 2026-09-22 与官方《原始字段代码说明》核对后的结论。
+    /// 具体依据与「不要反复核实」的两组例外见 `docs/field-code-notes.md`。
+    #[test]
+    fn field_codes_reconciled_with_official_helpcode() {
+        // 总数必须与 Vim 插件 (incoPatSearchCriteria) 的 scKEY 白名单一致
+        assert_eq!(FIELD_CODES.len(), 474, "字段总数应与 Vim 插件白名单一致");
+        assert_eq!(
+            FIELD_CODES.iter().map(|c| c.to_ascii_uppercase()).collect::<std::collections::HashSet<_>>().len(),
+            FIELD_CODES.len(),
+            "FIELD_CODES 不应有重复项"
+        );
+
+        // 官方页面上看不到、但数据库实测可用 —— 必须保留
+        for code in [
+            "AP-ORADD", "AP-TSADD",
+            "IN-ORADD", "IN-OTADD", "IN-TSADD",
+            "FIRST-CLAIM-CN", "FIRST-CLAIM-EN", "FIRST-CLAIM-OT",
+            "PHC", "IN-DWPI",
+            "CHANGE-DC", "FAM-DC", "CP-DC", "FC-DC", "CN-DC", "REF-DC", "CUSTOMS-DC",
+            // 页面里没有，但数据库实测可用的旧字段
+            "APNORTT", "AEENORTT", "PATENTEENORTT",
+        ] {
+            assert!(is_field_code(code), "应当是合法字段代码: {}", code);
+        }
+
+        // 数据库实测报「找不到该字段」 —— 不得加回来
+        for code in ["FIRST-CLAIM-OR", "FIRST-CLAIM-TS", "IN-OR-ADD", "IN-ADD-OTH"] {
+            assert!(!is_field_code(code), "不应是合法字段代码: {}", code);
+        }
     }
 }

@@ -181,6 +181,15 @@ ti=空调
 
 ## 二、字段代码完整列表
 
+> **⚠️ 2026-09-22 更新**：本节表格是早期从公开资料整理的，已按官方《原始字段代码说明》
+> 与数据库实测修正。**完整、权威的 474 条清单见
+> [`field-code-notes.md`](field-code-notes.md) 与 `src/parser/fields.rs` 的 `FIELD_CODES`。**
+>
+> 修正内容：删除了 4 个**已证实不存在**的字段（`FIRST-CLAIM-OR`、`FIRST-CLAIM-TS`、
+> `IN-OR-ADD`、`IN-ADD-OTH`，数据库报「找不到该字段」），补入 16 个官方字段。
+> **核对规则与两组「页面上看不到 / 已证实不存在」的例外见
+> [`field-code-notes.md`](field-code-notes.md)，不要再单独去核实。**
+
 ### 技术字段 (Technical Fields)
 
 | 字段代码 | 说明 |
@@ -207,12 +216,13 @@ ti=空调
 | `TIAB-DWPI` | DWPI 标题+摘要 |
 | `CLAIM` | 权利要求 |
 | `FIRST-CLAIM` | 第一权利要求 |
-| `FIRST-CLAIM-OR` | 第一权利要求（原文） |
+| `FIRST-CLAIM-CN` | 首项权利要求(中文) |
+| `FIRST-CLAIM-EN` | 首项权利要求(英文) |
+| `FIRST-CLAIM-OT` | 首项权利要求(其他) |
 | `INDEPCLAIMS-CN` | 中文独立权利要求 |
 | `DEPCLAIMS-CN` | 中文从属权利要求 |
 | `NO-INDEPCLAIMS` | 独立权利要求数量 |
 | `NO-DEPCLAIMS` | 从属权利要求数量 |
-| `FIRST-CLAIM-TS` | 第一权利要求翻译状态 |
 | `LEN-FIRST-CLAIM` | 第一权利要求长度 |
 | `CLAIM-EN` | 英文权利要求 |
 | `CLAIM-CN` | 中文权利要求 |
@@ -408,6 +418,7 @@ ti=空调
 | `FI` | 日本 FI 分类 |
 | `FT` | 日本 F-Term |
 | `CLASS` | 所有分类号 |
+| `PHC` | 中国范畴分类 |
 | `BCLASS` | 产业分类 |
 | `MBCLAS1` ~ `MBCLAS4` | 主产业分类 L1-L4 |
 | `MBCLASS` | 主产业分类 |
@@ -435,6 +446,8 @@ ti=空调
 | `AUTH` | 公开机构/专利局 |
 | `PNC` | 公开国家代码 |
 | `AP-ADD` | 申请人地址 |
+| `AP-ORADD` | 申请人地址（原始） |
+| `AP-TSADD` | 申请人地址（英文） |
 | `PR-AU` | 优先权国家 |
 | `PR-AU-DWPI` | DWPI 优先权国家 |
 | `ORIPRC-DWPI` | DWPI 原始优先权国家 |
@@ -448,8 +461,9 @@ ti=空调
 | `PATENTEE-CITY` | 专利权人城市 |
 | `PATENTEE-COUNTY` | 专利权人区县 |
 | `IN-ADD` | 发明人地址 |
-| `IN-ADD-OTH` | 发明人其他地址 |
-| `IN-OR-ADD` | 发明人原文地址 |
+| `IN-ORADD` | 发明人地址（原始） |
+| `IN-OTADD` | 发明人地址（其他） |
+| `IN-TSADD` | 发明人地址（英文） |
 | `IN-CITY` | 发明人城市 |
 | `IN-STATE` | 发明人州/省 |
 | `ASSIGN-COUNTRY` | 转让国家 |
@@ -680,6 +694,23 @@ ti=空调
 | `RPD` | 按公开日排序的语义检索 |
 
 ---
+
+### 2026-09-22 与官方《原始字段代码说明》核对后补入的字段
+
+| 字段代码 | 说明 | 页面上能直接看到 |
+| --- | --- | --- |
+| `IN-DWPI` | DWPI 发明人 | 是 |
+| `CHANGE-DC` | 变更入库时间 | **否**（只写在页面 HTML 注释里） |
+| `FAM-DC` | 同族信息更新时间 | **否**（同上） |
+| `CP-DC` | 专利引证更新时间 | **否**（同上） |
+| `FC-DC` | 专利被引证更新时间 | **否**（同上） |
+| `CN-DC` | 非专利引证更新时间 | **否**（同上） |
+| `REF-DC` | 引证整体更新时间 | **否**（同上） |
+| `CUSTOMS-DC` | 海关备案最近更新时间 | **否**（同上） |
+
+> 另有 3 个**页面上完全没有、但数据库实测可用**的旧字段保留在清单中（见上文各分类表）：
+> `APNORTT`、`AEENORTT`、`PATENTEENORTT`。
+> 全部依据与「不要再核实」的两组例外见 [`field-code-notes.md`](field-code-notes.md)。
 
 ## 三、检索式示例
 

@@ -125,6 +125,12 @@ dprint fmt
 
 完整的字段列表和检索规则说明见 [docs/incopat-search-reference.md](docs/incopat-search-reference.md)。
 
+> **字段清单（474 个）的权威依据**：`src/parser/fields.rs` 的 `FIELD_CODES`。
+> 它与 Vim 插件 [incoPatSearchCriteria](https://github.com/xylinkun/incoPatSearchCriteria) 的
+> `scKEY` 白名单**必须始终保持一致**。核对规则、以及两组已经实测确认的例外
+> （页面上看不到但数据库可用的字段 / 已证实不存在的字段）都记在
+> [docs/field-code-notes.md](docs/field-code-notes.md)——**不要再反复核实这些字段**。
+
 ## 语义检索字段的规则
 
 incoPat 对语义检索字段 (`R` / `RAD` / `RPD`) 有严格的语法约束,格式化器会自动修正可无损修复的写法,其余违规会直接报错:

@@ -15,6 +15,6 @@
     "target"
   ],
   "plugins": [
-    "https://github.com/CNIPA/dprint-plugin-incopat/releases/download/v0.2.5/dprint_plugin_incopat.wasm"
+    "https://github.com/CNIPA/dprint-plugin-incopat/releases/download/v0.2.6/dprint_plugin_incopat.wasm"
   ]
 }
