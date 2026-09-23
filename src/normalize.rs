@@ -651,7 +651,7 @@ mod tests {
             format(
                 "tiabc = (压缩机 or compressor) or des = (比热容) and R = (一种空调水系统水容量自测工具)"
             ),
-            "(\n        tiabc = (压缩机 or compressor)\n     or des = (比热容)\n)\nand R = (一种空调水系统水容量自测工具)\n"
+            "(\n        tiabc = (压缩机 or compressor)\n    or  des = (比热容)\n)\nand R = (一种空调水系统水容量自测工具)\n"
         );
     }
 
@@ -718,7 +718,7 @@ mod tests {
     fn rpd_wrapped_rest_at_end() {
         assert_eq!(
             format("tiabc = (y) or des = (z) and RPD = (x)"),
-            "(\n        tiabc = (y)\n     or des = (z)\n)\nand RPD = (x)\n"
+            "(\n        tiabc = (y)\n    or  des = (z)\n)\nand RPD = (x)\n"
         );
     }
 
@@ -783,7 +783,7 @@ mod tests {
         );
         assert_eq!(
             format("ti=(毛衣) OPT (ab=编织 or 针织)"),
-            "ti = (毛衣)\nOPT (\n        ab = (编织)\n     or 针织\n)\n"
+            "ti = (毛衣)\nOPT (\n        ab = (编织)\n    or  针织\n)\n"
         );
     }
 
@@ -919,7 +919,7 @@ mod tests {
     fn redundant_parens_in_part_collapsed() {
         assert_eq!(
             format("ti = (a) and ((ab = (b) or ipc = (c)))"),
-            "(\n        ti = (a)\n    and (\n                ab = (b)\n             or ipc = (c)\n        )\n)\n"
+            "(\n        ti = (a)\n   and  (\n                ab = (b)\n            or  ipc = (c)\n        )\n)\n"
         );
     }
 
@@ -929,7 +929,7 @@ mod tests {
     fn semantic_rest_parens_collapsed() {
         assert_eq!(
             format("R = (x) and ((tiabc = (y) or des = (z)))"),
-            "    R = (x)\nand (\n        tiabc = (y)\n     or des = (z)\n)\n"
+            "    R = (x)\nand (\n        tiabc = (y)\n    or  des = (z)\n)\n"
         );
     }
 
@@ -1027,7 +1027,7 @@ mod tests {
         // 已是组/复合表达式的操作数不再额外包裹(链中的组按层级规则多行显示)
         assert_eq!(
             format("a (s) (b or c)"),
-            "(a) (s) (\n        b\n     or c\n)\n"
+            "(a) (s) (\n        b\n    or  c\n)\n"
         );
     }
 }

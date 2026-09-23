@@ -382,6 +382,8 @@ const OPERAND_OFFSET: usize = 4;
 struct ContinuationOpLayout {
     /// Columns the operator starts to the left of the continuation column.
     shift_left: usize,
+    /// Spaces in front of the operator.
+    pad_before: usize,
     /// Spaces between the operator and the operand behind it.
     spaces_after: usize,
 }
@@ -399,7 +401,34 @@ fn continuation_op_layout(op: &str) -> ContinuationOpLayout {
     let width = op.chars().count();
     ContinuationOpLayout {
         shift_left: width.saturating_sub(OPERAND_OFFSET),
+        pad_before: 0,
         spaces_after: OPERAND_OFFSET.saturating_sub(width),
+    }
+}
+
+/// Lay out the connector of a group continuation line, right-justified on the
+/// group's own connector column (`OPERAND_OFFSET` columns in front of the field
+/// column), so every connector of the level starts in the same column whatever
+/// follows it. A parenthesized operand opens in that column, so its connector is
+/// justified right in front of it, and `or` — one column narrower than `and` —
+/// is balanced with an extra trailing space so both operands start in the same
+/// column.
+fn group_op_layout(op: &str, indent_col: usize, next: &QueryExpr) -> ContinuationOpLayout {
+    let parenthesized = matches!(next, QueryExpr::Group(_));
+    let or_bonus = usize::from(op == "or");
+    let op_col = indent_col.saturating_sub(OPERAND_OFFSET);
+    if parenthesized {
+        ContinuationOpLayout {
+            shift_left: 0,
+            pad_before: op_col.saturating_sub(1).saturating_add(or_bonus),
+            spaces_after: 2,
+        }
+    } else {
+        ContinuationOpLayout {
+            shift_left: 0,
+            pad_before: op_col,
+            spaces_after: 1 + or_bonus,
+        }
     }
 }
 
@@ -535,14 +564,16 @@ fn gen_group(expr: &GroupExpr, ctx: &Context) -> PrintItems {
     }
     items.extend(gen_expr(parts[0].expr, &group_ctx));
 
-    // Continuation fields with right-justified connectors.
+    // Continuation fields, connector right-justified in front of the indent
+    // column so every `and` / `or` of a level starts in the same column and the
+    // fields behind them line up in the next one.
     for part in &parts[1..] {
         items.push_signal(Signal::NewLine);
         let op = part.op.clone().unwrap_or_else(|| "and".to_string());
-        let pad = indent_col.saturating_sub(op.len() + 1);
-        items.push_string(" ".repeat(pad));
+        let layout = group_op_layout(&op, indent_col, &part.expr);
+        items.push_string(" ".repeat(layout.pad_before));
         items.push_string(op);
-        items.push_string(" ".into());
+        items.push_string(" ".repeat(layout.spaces_after));
         items.extend(gen_expr(part.expr, &group_ctx));
     }
 
@@ -651,7 +682,7 @@ fn gen_proximity(expr: &ProximityExpr, ctx: &Context) -> PrintItems {
 /// ```text
 /// (
 ///         fragment ...
-///     or continuation ...
+///    or  continuation ...
 /// )
 /// (s) (
 ///         fragment ...
@@ -737,7 +768,7 @@ fn gen_operand_block(operand: &QueryExpr, block_col: usize, ctx: &Context) -> Pr
 /// ```text
 /// (
 ///         content ...
-///     or continuation ...
+///    or  continuation ...
 /// )
 /// ```
 ///
@@ -938,7 +969,7 @@ mod tests {
     fn top_level_or_breaks() {
         assert_eq!(
             format("TI=空调 or AB=蒸发器"),
-            "(\n        ti = (空调)\n     or ab = (蒸发器)\n)\n"
+            "(\n        ti = (空调)\n    or  ab = (蒸发器)\n)\n"
         );
     }
 
@@ -946,7 +977,7 @@ mod tests {
     fn top_level_chain_three_parts() {
         assert_eq!(
             format("TI=a AND AB=b OR IPC=c"),
-            "(\n        ti = (a)\n    and ab = (b)\n     or ipc = (c)\n)\n"
+            "(\n        ti = (a)\n    and ab = (b)\n    or  ipc = (c)\n)\n"
         );
     }
 
@@ -1027,6 +1058,25 @@ mod tests {
         assert_eq!(
             format("tiab=(\"机器人\" (3f))"),
             "tiab = ((\"机器人\") (3f))\n"
+        );
+    }
+
+    // ── Connector alignment inside a group ──
+
+    /// Every connector of a level lines up on the same column, so the operands
+    /// behind them do too — whether the operand is a field, a keyword or a
+    /// parenthesized block.
+    #[test]
+    fn group_connectors_align_whatever_follows() {
+        assert_eq!(
+            format("(ab = (b) or ipc = (c)) and ti = (a)"),
+            "(\n        (\n                ab = (b)\n            or  ipc = (c)\n        )\n    and ti = (a)\n)\n"
+        );
+        // The group is the last operand and wraps: `and (` and `or ` both end
+        // in the same column, and the group's `(` opens right behind them.
+        assert_eq!(
+            format("ti = (a) or (ab = (b) or ipc = (c))"),
+            "(\n        ti = (a)\n    or  (\n                ab = (b)\n            or  ipc = (c)\n        )\n)\n"
         );
     }
 

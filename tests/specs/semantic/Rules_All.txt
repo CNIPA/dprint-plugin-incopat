@@ -39,7 +39,7 @@ tiabc = (压缩机 or compressor) or des = (比热容) and R = (一种空调水�
 [expect]
 (
         tiabc = (压缩机 or compressor)
-     or des = (比热容)
+    or  des = (比热容)
 )
 and R = (一种空调水系统水容量自测工具)
 
@@ -99,7 +99,7 @@ tiabc = (y) or des = (z) and RPD = (x)
 [expect]
 (
         tiabc = (y)
-     or des = (z)
+    or  des = (z)
 )
 and RPD = (x)
 

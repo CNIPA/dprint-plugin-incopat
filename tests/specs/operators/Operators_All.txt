@@ -14,7 +14,7 @@ TI=空调 or AB=蒸发器
 [expect]
 (
         ti = (空调)
-     or ab = (蒸发器)
+    or  ab = (蒸发器)
 )
 
 == should break top-level NOT in chain ==
@@ -33,7 +33,7 @@ TI=a AND AB=b OR IPC=c
 (
         ti = (a)
     and ab = (b)
-     or ipc = (c)
+    or  ipc = (c)
 )
 
 == should break complex real-world query ==
@@ -53,7 +53,7 @@ TI=a AND AB=b AND IPC=c OR AN=d NOT CPC=e
         ti = (a)
     and ab = (b)
     and ipc = (c)
-     or an = (d)
+    or  an = (d)
     not cpc = (e)
 )
 

@@ -33,5 +33,5 @@ ti=(毛衣) OPT (ab=编织 or ap=某某公司)
 ti = (毛衣)
 OPT (
         ab = (编织)
-     or ap = (某某公司)
+    or  ap = (某某公司)
 )
