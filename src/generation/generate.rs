@@ -409,26 +409,16 @@ fn continuation_op_layout(op: &str) -> ContinuationOpLayout {
 /// Lay out the connector of a group continuation line, right-justified on the
 /// group's own connector column (`OPERAND_OFFSET` columns in front of the field
 /// column), so every connector of the level starts in the same column whatever
-/// follows it. A parenthesized operand opens in that column, so its connector is
-/// justified right in front of it, and `or` — one column narrower than `and` —
-/// is balanced with an extra trailing space so both operands start in the same
-/// column.
-fn group_op_layout(op: &str, indent_col: usize, next: &QueryExpr) -> ContinuationOpLayout {
-    let parenthesized = matches!(next, QueryExpr::Group(_));
+/// follows it. A parenthesized operand opens right behind its connector, and a
+/// bare operand is padded behind it so both land in the same column; `or` — one
+/// column narrower than `and` — keeps that column thanks to the extra trailing
+/// space.
+fn group_op_layout(op: &str, indent_col: usize) -> ContinuationOpLayout {
     let or_bonus = usize::from(op == "or");
-    let op_col = indent_col.saturating_sub(OPERAND_OFFSET);
-    if parenthesized {
-        ContinuationOpLayout {
-            shift_left: 0,
-            pad_before: op_col.saturating_sub(1).saturating_add(or_bonus),
-            spaces_after: 2,
-        }
-    } else {
-        ContinuationOpLayout {
-            shift_left: 0,
-            pad_before: op_col,
-            spaces_after: 1 + or_bonus,
-        }
+    ContinuationOpLayout {
+        shift_left: 0,
+        pad_before: indent_col.saturating_sub(OPERAND_OFFSET),
+        spaces_after: 1 + or_bonus,
     }
 }
 
@@ -570,7 +560,7 @@ fn gen_group(expr: &GroupExpr, ctx: &Context) -> PrintItems {
     for part in &parts[1..] {
         items.push_signal(Signal::NewLine);
         let op = part.op.clone().unwrap_or_else(|| "and".to_string());
-        let layout = group_op_layout(&op, indent_col, &part.expr);
+        let layout = group_op_layout(&op, indent_col);
         items.push_string(" ".repeat(layout.pad_before));
         items.push_string(op);
         items.push_string(" ".repeat(layout.spaces_after));
@@ -1077,6 +1067,26 @@ mod tests {
         assert_eq!(
             format("ti = (a) or (ab = (b) or ipc = (c))"),
             "(\n        ti = (a)\n    or  (\n                ab = (b)\n            or  ipc = (c)\n        )\n)\n"
+        );
+    }
+
+    /// A connector whose operand is a parenthesized group starts in the same
+    /// column as one followed by a field — only `or` gets the extra trailing
+    /// space, `and` does not.
+    #[test]
+    fn connector_before_group_keeps_one_space() {
+        assert_eq!(
+            format("des = (x) and des = (y) and (tiabc = (a) or tiabc = (b))"),
+            concat!(
+                "(\n",
+                "        des = (x)\n",
+                "    and des = (y)\n",
+                "    and (\n",
+                "                tiabc = (a)\n",
+                "            or  tiabc = (b)\n",
+                "        )\n",
+                ")\n"
+            )
         );
     }
 

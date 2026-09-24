@@ -919,7 +919,7 @@ mod tests {
     fn redundant_parens_in_part_collapsed() {
         assert_eq!(
             format("ti = (a) and ((ab = (b) or ipc = (c)))"),
-            "(\n        ti = (a)\n   and  (\n                ab = (b)\n            or  ipc = (c)\n        )\n)\n"
+            "(\n        ti = (a)\n    and (\n                ab = (b)\n            or  ipc = (c)\n        )\n)\n"
         );
     }
 
