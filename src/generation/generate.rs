@@ -513,11 +513,48 @@ fn gen_group(expr: &GroupExpr, ctx: &Context) -> PrintItems {
     let mut items = PrintItems::new();
     items.push_string("(".into());
 
-    // Groups inside field values keep the adaptive inline style.
+    // Groups inside field values keep the inline style while they fit. When
+    // their contents wrap, the parenthesis pair breaks onto its own lines —
+    // opener on the connector column, contents one level deeper, closer back on
+    // the opener column — exactly like the proximity blocks.
     if ctx.in_field_body {
-        let inner_ctx = ctx.with_field_body();
-        items.extend(gen_expr(&expr.inner, &inner_ctx));
-        items.push_string(")".into());
+        let open_col = 8 * ctx.depth + 8;
+        let body_indent = open_col + OPERAND_OFFSET;
+        let group_ctx = ctx.with_block(open_col, Some(body_indent));
+        let mut items = PrintItems::new();
+        items.push_signal(Signal::StartNewLineGroup);
+        items.push_string("(".into());
+        items.push_signal(Signal::PossibleNewLine);
+        items.push_signal(Signal::StartNewLineGroup);
+
+        let mut multiline_condition = Condition::new(
+            "multilineGroupBody",
+            ConditionProperties {
+                condition: condition_resolvers::is_start_of_line(),
+                true_path: Some(" ".repeat(body_indent).into()),
+                false_path: None,
+            },
+        );
+        let multiline_reference = multiline_condition.create_reference();
+        items.push_condition(multiline_condition);
+        items.extend(gen_expr(&expr.inner, &group_ctx));
+        items.push_signal(Signal::FinishNewLineGroup);
+        items.push_signal(Signal::FinishNewLineGroup);
+
+        let mut closing_path = PrintItems::new();
+        closing_path.push_signal(Signal::NewLine);
+        if open_col > 0 {
+            closing_path.push_string(" ".repeat(open_col));
+        }
+        closing_path.push_string(")".into());
+        items.push_condition(Condition::new(
+            "multilineGroupClosingParen",
+            ConditionProperties {
+                condition: multiline_reference.create_resolver(),
+                true_path: Some(closing_path),
+                false_path: Some(")".into()),
+            },
+        ));
         return items;
     }
 
@@ -766,7 +803,7 @@ fn gen_operand_block(operand: &QueryExpr, block_col: usize, ctx: &Context) -> Pr
 /// aligned with it and the content is indented relative to it.
 fn gen_block(inner: &QueryExpr, open_col: usize, ctx: &Context) -> PrintItems {
     let body_indent = open_col + 8;
-    let body_ctx = ctx.with_block(open_col);
+    let body_ctx = ctx.with_block(open_col, None);
     let mut items = PrintItems::new();
 
     // The block is wrapped in two nested new line groups: the outer one keeps
@@ -1085,6 +1122,34 @@ mod tests {
                 "                tiabc = (a)\n",
                 "            or  tiabc = (b)\n",
                 "        )\n",
+                ")\n"
+            )
+        );
+    }
+
+    /// When a parenthesized group's contents wrap, the parens break onto their
+    /// own lines: the opener lands on the connector column, the contents sit one
+    /// level deeper, and the closer is back on the opener's column.
+    #[test]
+    fn wrapped_group_breaks_its_parens() {
+        let group = (1..=22)
+            .map(|i| format!("kkkkkkkk{i}"))
+            .collect::<Vec<_>>()
+            .join(" or ");
+        let input = format!(
+            "who = (x or aaaaaaaaaa or bbbbbbbbbb or cccccccccc or dddddddddd or eeeeeeeeee or ffffffffff or gggggggggg or hhhhhhhhhh or iiiiiiiiii or jjjjjjjjjj or ({group}) or zzzzzzzzzz)"
+        );
+        assert_eq!(
+            format(&input),
+            concat!(
+                "who = (\n",
+                "        x or aaaaaaaaaa or bbbbbbbbbb or cccccccccc or dddddddddd or eeeeeeeeee or ffffffffff or gggggggggg\n",
+                "    or  hhhhhhhhhh or iiiiiiiiii or jjjjjjjjjj\n",
+                "    or  (\n",
+                "            kkkkkkkk1 or kkkkkkkk2 or kkkkkkkk3 or kkkkkkkk4 or kkkkkkkk5 or kkkkkkkk6 or kkkkkkkk7 or kkkkkkkk8\n",
+                "            or  kkkkkkkk9 or kkkkkkkk10 or kkkkkkkk11 or kkkkkkkk12 or kkkkkkkk13 or kkkkkkkk14 or kkkkkkkk15\n",
+                "            or  kkkkkkkk16 or kkkkkkkk17 or kkkkkkkk18 or kkkkkkkk19 or kkkkkkkk20 or kkkkkkkk21 or kkkkkkkk22\n",
+                "        ) or zzzzzzzzzz\n",
                 ")\n"
             )
         );

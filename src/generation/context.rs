@@ -12,9 +12,12 @@ pub struct Context<'a> {
     pub in_field_body: bool,
     /// Column of the closing paren of the innermost wrapped block inside a
     /// field value (e.g. one side of a `(s)` / `(p)` proximity expression).
-    /// Continuation lines of chains inside such a block are indented 4 columns
-    /// past that paren instead of relative to `depth`.
     pub block_close_col: Option<usize>,
+    /// Column the content of the innermost enclosing construct starts in: the
+    /// column its first operand and every operand behind a connector sits in.
+    /// The connectors of that construct are right-aligned four columns in front
+    /// of it.
+    pub content_col: Option<usize>,
 }
 
 impl<'a> Context<'a> {
@@ -25,6 +28,7 @@ impl<'a> Context<'a> {
             depth: 0,
             in_field_body: false,
             block_close_col: None,
+            content_col: None,
         }
     }
 
@@ -41,18 +45,22 @@ impl<'a> Context<'a> {
             depth: self.depth,
             in_field_body: true,
             block_close_col: self.block_close_col,
+            content_col: self.content_col,
         }
     }
 
     /// Return a new context for the content of a wrapped block whose closing
-    /// paren sits in `close_col`.
-    pub fn with_block(&self, close_col: usize) -> Context<'a> {
+    /// paren sits in `close_col`. `content_col`, when given, is the column the
+    /// block's own chain operands start in (a block opened as a chain operand
+    /// keeps the enclosing operand column).
+    pub fn with_block(&self, close_col: usize, content_col: Option<usize>) -> Context<'a> {
         Context {
             config: self.config,
             source: self.source,
             depth: self.depth,
             in_field_body: true,
             block_close_col: Some(close_col),
+            content_col: content_col.or(self.content_col),
         }
     }
 
@@ -64,6 +72,7 @@ impl<'a> Context<'a> {
             depth: self.depth + 1,
             in_field_body: self.in_field_body,
             block_close_col: self.block_close_col,
+            content_col: self.content_col,
         }
     }
 }
