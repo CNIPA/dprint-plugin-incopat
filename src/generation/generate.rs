@@ -353,16 +353,21 @@ fn gen_chain_operand(expr: &QueryExpr, content_col: usize, ctx: &Context) -> Pri
     }
 }
 
-/// Render one operand and, for a wrapped proximity block, record the line
-/// numbers around it so the following operand can be pushed onto its own line
-/// when the block spans several lines.
+/// Render one operand and record the line numbers around it, so the operand
+/// behind the next connector can be pushed onto its own line whenever this one
+/// spans several lines — a wrapped parenthesis pair never has content trailing
+/// its closing paren.
+///
+/// Line numbers are only recorded for operands that can actually wrap: a
+/// parenthesized block (a proximity expression or a group whose contents form a
+/// chain) and any expression that already carries a block inside it.
 fn gen_chain_operand_lines(
     expr: &QueryExpr,
     content_col: usize,
     ctx: &Context,
     items: &mut PrintItems,
 ) -> Option<(LineNumber, LineNumber)> {
-    if !matches!(expr, QueryExpr::Proximity(_)) {
+    if !can_wrap(expr) {
         items.extend(gen_chain_operand(expr, content_col, ctx));
         return None;
     }
@@ -372,6 +377,36 @@ fn gen_chain_operand_lines(
     let end_line = LineNumber::new("chainBlockEndLine");
     items.push_info(Info::LineNumber(end_line));
     Some((start_line, end_line))
+}
+
+/// Whether an operand can occupy more than one line, i.e. whether the operand
+/// behind the next connector has to be prepared to start on a fresh line.
+fn can_wrap(expr: &QueryExpr) -> bool {
+    match expr {
+        // Rendered as a parenthesized block by `gen_chain_operand`.
+        QueryExpr::Proximity(_) => true,
+        // A group whose contents form a chain is rendered as a parenthesized
+        // block; a single-part group stays inline.
+        QueryExpr::Group(group) => has_binary_chain(&group.inner),
+        // A field value can wrap inside its own parentheses.
+        QueryExpr::Field(field) => matches!(field.body, FieldBody::Parenthesized { .. }),
+        _ => false,
+    }
+}
+
+/// Whether the expression contains a binary chain (directly or inside groups),
+/// which is what makes a parenthesized construct laid out over several lines.
+fn has_binary_chain(expr: &QueryExpr) -> bool {
+    match expr {
+        QueryExpr::Binary(_) => true,
+        QueryExpr::Group(group) => has_binary_chain(&group.inner),
+        QueryExpr::Not(not) => has_binary_chain(&not.operand),
+        QueryExpr::Field(field) => match &field.body {
+            FieldBody::Simple(inner) => has_binary_chain(inner),
+            FieldBody::Parenthesized { .. } => true,
+        },
+        _ => false,
+    }
 }
 
 /// Columns between the continuation-operator column of a wrapped chain and the
@@ -1149,7 +1184,8 @@ mod tests {
                 "            kkkkkkkk1 or kkkkkkkk2 or kkkkkkkk3 or kkkkkkkk4 or kkkkkkkk5 or kkkkkkkk6 or kkkkkkkk7 or kkkkkkkk8\n",
                 "            or  kkkkkkkk9 or kkkkkkkk10 or kkkkkkkk11 or kkkkkkkk12 or kkkkkkkk13 or kkkkkkkk14 or kkkkkkkk15\n",
                 "            or  kkkkkkkk16 or kkkkkkkk17 or kkkkkkkk18 or kkkkkkkk19 or kkkkkkkk20 or kkkkkkkk21 or kkkkkkkk22\n",
-                "        ) or zzzzzzzzzz\n",
+                "        )\n",
+                "    or  zzzzzzzzzz\n",
                 ")\n"
             )
         );
