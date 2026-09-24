@@ -554,7 +554,7 @@ fn gen_group(expr: &GroupExpr, ctx: &Context) -> PrintItems {
     // the opener column — exactly like the proximity blocks.
     if ctx.in_field_body {
         let open_col = 8 * ctx.depth + 8;
-        let body_indent = open_col + OPERAND_OFFSET;
+        let body_indent = open_col + 2 * OPERAND_OFFSET;
         let group_ctx = ctx.with_block(open_col, Some(body_indent));
         let mut items = PrintItems::new();
         items.push_signal(Signal::StartNewLineGroup);
@@ -1181,7 +1181,7 @@ mod tests {
                 "        x or aaaaaaaaaa or bbbbbbbbbb or cccccccccc or dddddddddd or eeeeeeeeee or ffffffffff or gggggggggg\n",
                 "    or  hhhhhhhhhh or iiiiiiiiii or jjjjjjjjjj\n",
                 "    or  (\n",
-                "            kkkkkkkk1 or kkkkkkkk2 or kkkkkkkk3 or kkkkkkkk4 or kkkkkkkk5 or kkkkkkkk6 or kkkkkkkk7 or kkkkkkkk8\n",
+                "                kkkkkkkk1 or kkkkkkkk2 or kkkkkkkk3 or kkkkkkkk4 or kkkkkkkk5 or kkkkkkkk6 or kkkkkkkk7 or kkkkkkkk8\n",
                 "            or  kkkkkkkk9 or kkkkkkkk10 or kkkkkkkk11 or kkkkkkkk12 or kkkkkkkk13 or kkkkkkkk14 or kkkkkkkk15\n",
                 "            or  kkkkkkkk16 or kkkkkkkk17 or kkkkkkkk18 or kkkkkkkk19 or kkkkkkkk20 or kkkkkkkk21 or kkkkkkkk22\n",
                 "        )\n",
