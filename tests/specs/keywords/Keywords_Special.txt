@@ -1,0 +1,7 @@
+-- /file.incopat --
+~~ lineWidth: 120 ~~
+== should keep a middle dot inside a keyword ==
+who = ("Langebach Robin" or "Langebach, Robin" or "Robin Langebach" or R·兰格巴赫 or 罗宾·朗格巴赫)
+
+[expect]
+who = ("Langebach Robin" or "Langebach, Robin" or "Robin Langebach" or R·兰格巴赫 or 罗宾·朗格巴赫)

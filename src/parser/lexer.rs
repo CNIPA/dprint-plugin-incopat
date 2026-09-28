@@ -335,7 +335,24 @@ fn is_word_continue(ch: char) -> bool {
         || ch == '/'
         || ch == '-'
         || is_special_char(ch)
+        || is_name_dot(ch)
         || is_cjk_or_extended(ch)
+}
+
+/// The Unicode "middle dot" family. These characters glue the two halves of a
+/// single keyword together — foreign personal names like `罗宾·朗格巴赫` or
+/// `R·兰格巴赫`. They must stay inside the term: if the lexer split there, the
+/// parser would insert an implicit `and` and silently rewrite the name into
+/// `罗宾 and ·朗格巴赫`.
+fn is_name_dot(ch: char) -> bool {
+    matches!(ch,
+        '\u{00B7}' // · MIDDLE DOT
+        | '\u{2022}' // • BULLET
+        | '\u{2027}' // ‧ HYPHENATION POINT
+        | '\u{2219}' // ∙ BULLET OPERATOR
+        | '\u{22C5}' // ⋅ DOT OPERATOR
+        | '\u{FF65}' // ･ HALFWIDTH KATAKANA MIDDLE DOT
+    )
 }
 
 /// Characters that can continue a keyword (non-word-start chars like CJK etc.)
@@ -769,6 +786,42 @@ mod tests {
                 (Keyword, "m$tor"),
             ]
         );
+    }
+
+    #[test]
+    fn middle_dot_inside_keyword() {
+        // 外国人名的间隔点属于关键词本身,不能被拆成两个操作数
+        let result = lex("who=(R·兰格巴赫 or 罗宾·朗格巴赫)");
+        assert_eq!(
+            result,
+            vec![
+                (FieldCode, "who"),
+                (Equals, "="),
+                (LParen, "("),
+                (Keyword, "R·兰格巴赫"),
+                (Or, "or"),
+                (Keyword, "罗宾·朗格巴赫"),
+                (RParen, ")"),
+            ]
+        );
+    }
+
+    #[test]
+    fn middle_dot_lookalikes_inside_keyword() {
+        for dot in ['\u{00B7}', '\u{2022}', '\u{2027}', '\u{2219}', '\u{22C5}', '\u{FF65}'] {
+            let input = format!("ti=a{}b", dot);
+            let expected_keyword = format!("a{}b", dot);
+            assert_eq!(
+                lex(&input),
+                vec![
+                    (FieldCode, "ti"),
+                    (Equals, "="),
+                    (Keyword, expected_keyword.as_str()),
+                ],
+                "middle dot U+{:04X} split the keyword",
+                dot as u32
+            );
+        }
     }
 
     #[test]
