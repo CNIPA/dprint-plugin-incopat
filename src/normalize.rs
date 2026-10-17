@@ -619,7 +619,7 @@ mod tests {
     fn r_at_start_single_field_rest() {
         assert_eq!(
             format("R = (一种空调水系统水容量自测工具) and des = (比热容)"),
-            "    R = (一种空调水系统水容量自测工具)\nand des = (比热容)\n"
+            "R = (一种空调水系统水容量自测工具) and\ndes = (比热容)\n"
         );
     }
 
@@ -639,7 +639,7 @@ mod tests {
             format(
                 "R = (一种空调水系统水容量自测工具) and (tiabc = (压缩机 or compressor) and des = (比热容))"
             ),
-            "    R = (一种空调水系统水容量自测工具)\nand (\n        tiabc = (压缩机 or compressor)\n    and des = (比热容)\n)\n"
+            "R = (一种空调水系统水容量自测工具) and\n(\n        tiabc = (压缩机 or compressor)\n    and des = (比热容)\n)\n"
         );
     }
 
@@ -661,7 +661,7 @@ mod tests {
             format(
                 "R = (一种空调水系统水容量自测工具) and tiabc = (压缩机 or compressor) and des = (比热容)"
             ),
-            "    R = (一种空调水系统水容量自测工具)\nand (\n        tiabc = (压缩机 or compressor)\n    and des = (比热容)\n)\n"
+            "R = (一种空调水系统水容量自测工具) and\n(\n        tiabc = (压缩机 or compressor)\n    and des = (比热容)\n)\n"
         );
     }
 
@@ -684,7 +684,7 @@ mod tests {
     fn or_connector_corrected_at_start() {
         assert_eq!(
             format("R = (一种空调水系统水容量自测工具) or tiabc = (压缩机)"),
-            "    R = (一种空调水系统水容量自测工具)\nand tiabc = (压缩机)\n"
+            "R = (一种空调水系统水容量自测工具) and\ntiabc = (压缩机)\n"
         );
     }
 
@@ -700,7 +700,7 @@ mod tests {
     fn implicit_and_becomes_explicit() {
         assert_eq!(
             format("R = (一种空调水系统水容量自测工具) tiabc = (压缩机)"),
-            "    R = (一种空调水系统水容量自测工具)\nand tiabc = (压缩机)\n"
+            "R = (一种空调水系统水容量自测工具) and\ntiabc = (压缩机)\n"
         );
     }
 
@@ -710,7 +710,7 @@ mod tests {
     fn rad_wrapped_rest() {
         assert_eq!(
             format("RAD = (x) and tiabc = (y) and des = (z)"),
-            "    RAD = (x)\nand (\n        tiabc = (y)\n    and des = (z)\n)\n"
+            "RAD = (x) and\n(\n        tiabc = (y)\n    and des = (z)\n)\n"
         );
     }
 
@@ -743,12 +743,14 @@ mod tests {
     }
 
     #[test]
-    fn r_nested_in_another_r_value_errors() {
-        // 一个 R 的值里又嵌入了另一个语义字段(粘贴合并错误)
-        let msg = format_err(
-            "R = (一种 and (tiabc = (压缩机) and class = (F25B39/02))\nand R = (一种空调水系统水容量自测工具))",
+    fn pasted_query_inside_r_value_stays_text() {
+        // 语义检索字段的值是自由文本,里面粘贴了什么就原样保留
+        assert_eq!(
+            format(
+                "R = (一种 and (tiabc = (压缩机) and class = (F25B39/02))\nand R = (一种空调水系统水容量自测工具))"
+            ),
+            "R = (一种 and (tiabc = (压缩机) and class = (F25B39/02)) and R = (一种空调水系统水容量自测工具))\n"
         );
-        assert!(msg.contains("只能出现一次"), "unexpected: {}", msg);
     }
 
     #[test]
@@ -849,7 +851,7 @@ mod tests {
         let result = format_with("R = (a) AND tiabc = (b)", |b| {
             b.boolean_operator_case(CaseStyle::Preserve);
         });
-        assert_eq!(result, "    R = (a)\nAND tiabc = (b)\n");
+        assert_eq!(result, "R = (a) AND\ntiabc = (b)\n");
     }
 
     // ── Field values are always parenthesized ──
@@ -929,7 +931,7 @@ mod tests {
     fn semantic_rest_parens_collapsed() {
         assert_eq!(
             format("R = (x) and ((tiabc = (y) or des = (z)))"),
-            "    R = (x)\nand (\n        tiabc = (y)\n    or  des = (z)\n)\n"
+            "R = (x) and\n(\n        tiabc = (y)\n    or  des = (z)\n)\n"
         );
     }
 
@@ -937,7 +939,7 @@ mod tests {
     fn semantic_single_rest_all_parens_removed() {
         assert_eq!(
             format("R = (x) and ((tiabc = (y)))"),
-            "    R = (x)\nand tiabc = (y)\n"
+            "R = (x) and\ntiabc = (y)\n"
         );
     }
 

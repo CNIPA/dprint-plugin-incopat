@@ -13,8 +13,8 @@ and R = (一种空调水系统水容量自测工具)
 R = (一种空调水系统水容量自测工具) and (tiabc = (压缩机 or compressor) and des = (比热容))
 
 [expect]
-    R = (一种空调水系统水容量自测工具)
-and (
+R = (一种空调水系统水容量自测工具) and
+(
         tiabc = (压缩机 or compressor)
     and des = (比热容)
 )
@@ -30,8 +30,8 @@ and R = (一种空调水系统水容量自测工具)
 R = (一种空调水系统水容量自测工具) and des = (比热容)
 
 [expect]
-    R = (一种空调水系统水容量自测工具)
-and des = (比热容)
+R = (一种空调水系统水容量自测工具) and
+des = (比热容)
 
 == should wrap multi-field rest in parentheses at end ==
 tiabc = (压缩机 or compressor) or des = (比热容) and R = (一种空调水系统水容量自测工具)
@@ -47,8 +47,8 @@ and R = (一种空调水系统水容量自测工具)
 R = (一种空调水系统水容量自测工具) and tiabc = (压缩机 or compressor) and des = (比热容)
 
 [expect]
-    R = (一种空调水系统水容量自测工具)
-and (
+R = (一种空调水系统水容量自测工具) and
+(
         tiabc = (压缩机 or compressor)
     and des = (比热容)
 )
@@ -73,8 +73,15 @@ R = (CN101850473B)
 R = (一种空调水系统水容量自测工具) or tiabc = (压缩机)
 
 [expect]
-    R = (一种空调水系统水容量自测工具)
-and tiabc = (压缩机)
+R = (一种空调水系统水容量自测工具) and
+tiabc = (压缩机)
+
+== should keep and on the semantic line before not ==
+R = (一种空调水系统水容量自测工具) and not tiabc = (压缩机)
+
+[expect]
+R = (一种空调水系统水容量自测工具) and
+not tiabc = (压缩机)
 
 == should correct or connector to and at end ==
 tiabc = (压缩机) or R = (一种空调水系统水容量自测工具)
@@ -87,8 +94,8 @@ and R = (一种空调水系统水容量自测工具)
 RAD = (x) and tiabc = (y) and des = (z)
 
 [expect]
-    RAD = (x)
-and (
+RAD = (x) and
+(
         tiabc = (y)
     and des = (z)
 )

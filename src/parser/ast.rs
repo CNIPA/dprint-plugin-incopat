@@ -35,7 +35,8 @@ pub enum QueryExpr {
     Field(FieldExpr),
     /// Parenthesized group: (expr).
     Group(GroupExpr),
-    /// A bare keyword (may include wildcards).
+    /// A bare keyword (may include wildcards). Also used to hold the raw free
+    /// text of a semantic search value (`R` / `RAD` / `RPD`).
     Keyword(KeywordTerm),
     /// A quoted phrase: "...".
     Quoted(QuotedTerm),

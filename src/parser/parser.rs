@@ -226,21 +226,15 @@ impl<'a> Parser<'a> {
 
         let body = if self.peek_kind() == TokenKind::LParen {
             let lparen = self.advance();
-            self.skip_non_blank_newlines();
-            let inner = self.parse_query_expr(0).unwrap_or(QueryExpr::Error(ErrorNode {
-                raw_text: String::new(),
-                span: Span::new(lparen.span.end, lparen.span.end),
-            }));
-            self.skip_non_blank_newlines();
-            let rparen_span = if self.peek_kind() == TokenKind::RParen {
-                self.advance().span
-            } else {
-                self.error_at_current("expected ')' to close semantic search expression");
-                Span::new(self.current_byte_pos(), self.current_byte_pos())
-            };
+            // The value is free text: it is kept as one opaque keyword so that
+            // no operator or separator is ever introduced inside it.
+            let (text, rparen_span) = self.read_semantic_value(lparen.span.end)?;
             FieldBody::Parenthesized {
                 lparen_span: lparen.span,
-                inner: Box::new(inner),
+                inner: Box::new(QueryExpr::Keyword(KeywordTerm {
+                    value: text,
+                    span: Span::new(lparen.span.end, rparen_span.start),
+                })),
                 rparen_span,
             }
         } else {
@@ -254,6 +248,83 @@ impl<'a> Parser<'a> {
             equals_span: equals_tok.span,
             body,
         }))
+    }
+
+    /// Read the raw value of a semantic search field (`R` / `RAD` / `RPD`).
+    ///
+    /// The value is free text — a patent number or a passage — not a query
+    /// expression. Everything between the parentheses belongs to it: spaces,
+    /// commas, quotes, `|` and even `and` / `or` are kept exactly as typed, and
+    /// no implicit connector is ever inserted. Line breaks and repeated
+    /// whitespace are folded to single spaces.
+    ///
+    /// The closing paren is found on the source text (tracking nested parens
+    /// and double quotes), and the token stream behind the value is rebuilt:
+    /// the eager lexer cannot know that this region is free text, so a quote or
+    /// a `#` inside the value may have swallowed the closing paren.
+    fn read_semantic_value(&mut self, value_start: usize) -> Option<(String, Span)> {
+        let source = self.source;
+        let mut depth = 1usize;
+        let mut in_quotes = false;
+        let mut escaped = false;
+        let mut close_start = None;
+
+        for (offset, ch) in source[value_start..].char_indices() {
+            if in_quotes {
+                if escaped {
+                    escaped = false;
+                } else if ch == '\\' {
+                    escaped = true;
+                } else if ch == '"' {
+                    in_quotes = false;
+                }
+                continue;
+            }
+            match ch {
+                '"' => in_quotes = true,
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close_start = Some(value_start + offset);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let Some(close_start) = close_start else {
+            self.error_at_current("expected ')' to close semantic search expression");
+            return None;
+        };
+
+        self.relex_from(close_start + 1);
+
+        let raw = &source[value_start..close_start];
+        let text = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+        Some((text, Span::new(close_start, close_start + 1)))
+    }
+
+    /// Drop every token that reaches past `byte_pos` and tokenize again from
+    /// there, keeping the absolute byte offsets.
+    fn relex_from(&mut self, byte_pos: usize) {
+        let mut keep = 0;
+        while keep < self.tokens.len() {
+            let span = self.tokens[keep].span;
+            if span.start >= byte_pos || span.end > byte_pos {
+                break;
+            }
+            keep += 1;
+        }
+        self.tokens.truncate(keep);
+
+        let mut lexer = Lexer::new(&self.source[byte_pos..]);
+        for mut token in lexer.tokenize() {
+            token.span = Span::new(token.span.start + byte_pos, token.span.end + byte_pos);
+            self.tokens.push(token);
+        }
+        self.pos = keep;
     }
 
     fn parse_field_expr(&mut self) -> Option<QueryExpr> {
@@ -897,6 +968,44 @@ mod tests {
                 }
             }
             other => panic!("expected binary, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn semantic_search_value_is_raw_text() {
+        // 语义检索字段的值按自由文本读入:空格、标点、| 都不参与表达式解析
+        let result = parse("R=(一种系统, 包括压缩机 | CN101850473B and 其它)");
+        assert_no_errors(&result);
+        match &result.file.statements[0] {
+            Statement::Query(QueryExpr::SemanticSearch(s)) => {
+                assert_eq!(s.keyword, "R");
+                match &s.body {
+                    FieldBody::Parenthesized { inner, .. } => match inner.as_ref() {
+                        QueryExpr::Keyword(k) => {
+                            assert_eq!(k.value, "一种系统, 包括压缩机 | CN101850473B and 其它")
+                        }
+                        other => panic!("expected raw keyword, got {:?}", other),
+                    },
+                    other => panic!("expected parenthesized body, got {:?}", other),
+                }
+            }
+            other => panic!("expected semantic search, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn semantic_search_value_folds_line_breaks() {
+        let result = parse("R = (\n    一种系统，\n    包括压缩机\n)");
+        assert_no_errors(&result);
+        match &result.file.statements[0] {
+            Statement::Query(QueryExpr::SemanticSearch(s)) => match &s.body {
+                FieldBody::Parenthesized { inner, .. } => match inner.as_ref() {
+                    QueryExpr::Keyword(k) => assert_eq!(k.value, "一种系统， 包括压缩机"),
+                    other => panic!("expected raw keyword, got {:?}", other),
+                },
+                other => panic!("expected parenthesized body, got {:?}", other),
+            },
+            other => panic!("expected semantic search, got {:?}", other),
         }
     }
 

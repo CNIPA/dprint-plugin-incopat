@@ -42,8 +42,8 @@ ap = (TREE@"清华大学")
 R = (CN101850473B)
 
 # Semantic search combined with regular query
-    RAD = (CN101850473B)
-and tiab = (发动机 or engine)
+RAD = (CN101850473B) and
+tiab = (发动机 or engine)
 
 # Wildcard search
 (

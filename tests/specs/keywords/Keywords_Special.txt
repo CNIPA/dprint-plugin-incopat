@@ -5,3 +5,18 @@ who = ("Langebach Robin" or "Langebach, Robin" or "Robin Langebach" or R·兰格
 
 [expect]
 who = ("Langebach Robin" or "Langebach, Robin" or "Robin Langebach" or R·兰格巴赫 or 罗宾·朗格巴赫)
+
+== should keep full-width punctuation inside a keyword ==
+R = (一种压缩与吸收混合式制冷系统，包括机械压缩制冷系统和吸收式制冷系统，能够利用机械压缩制冷系统中冷凝器产生的废热给吸收式制冷系统的发生器提供热量。)
+
+[expect]
+R = (一种压缩与吸收混合式制冷系统，包括机械压缩制冷系统和吸收式制冷系统，能够利用机械压缩制冷系统中冷凝器产生的废热给吸收式制冷系统的发生器提供热量。)
+
+== should keep half-width punctuation glued to a term ==
+ti = (一种系统,包括压缩机) and ab = (C++ or AT&T)
+
+[expect]
+(
+        ti = (一种系统,包括压缩机)
+    and ab = (C++ or AT&T)
+)

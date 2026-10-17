@@ -147,6 +147,18 @@ fn gen_top_level_binary(expr: &QueryExpr, ctx: &Context) -> PrintItems {
         return gen_single_part(&parts[0], ctx);
     }
 
+    // `R = (...)` at the beginning of the chain keeps the connecting `and` at
+    // the end of its own line: `R = (...) and` / rest. The connector then
+    // belongs to the semantic chunk, so selecting the rest of the query on its
+    // own still yields a complete query — the semantic field can be kept or
+    // dropped with a single selection. The mirror case (semantic field at the
+    // end) is already laid out that way: the connector starts its own line.
+    if parts.len() == 2 && is_semantic_operand(parts[0].expr) {
+        let connector = leading_semantic_connector(expr, ctx)
+            .or_else(|| parts[1].op.clone());
+        return gen_leading_semantic(&parts, connector, ctx);
+    }
+
     let align_width = calc_align_width(&parts);
     let mut items = PrintItems::new();
 
@@ -164,6 +176,60 @@ fn gen_top_level_binary(expr: &QueryExpr, ctx: &Context) -> PrintItems {
         emit_aligned_part(part, align_width, &mut items, ctx);
     }
 
+    items
+}
+
+/// Whether an operand is a semantic search field (R/RAD/RPD).
+fn is_semantic_operand(expr: &QueryExpr) -> bool {
+    matches!(expr, QueryExpr::SemanticSearch(_))
+}
+
+/// The formatted `and` of a semantic chain, read from the root binary node.
+///
+/// The flattened parts are not enough: `and not` is folded into a single `not`
+/// connector, so the `and` would otherwise vanish from the end of the semantic
+/// field's line.
+fn leading_semantic_connector(expr: &QueryExpr, ctx: &Context) -> Option<String> {
+    match expr {
+        QueryExpr::Binary(b) if is_semantic_operand(&b.left) && b.op == BoolOp::And => {
+            Some(format_bool_op(BoolOp::And, &b.op_span, ctx))
+        }
+        _ => None,
+    }
+}
+
+/// Render a chain whose first operand is a semantic search field: the `and`
+/// that connects it to the rest of the query stays on the semantic field's
+/// line, and the rest starts on a fresh line at the margin.
+///
+/// ```text
+/// R = (一种空调水系统水容量自测工具) and
+/// (
+///         tiabc = (压缩机 or compressor)
+///     and des = (比热容)
+/// )
+/// ```
+fn gen_leading_semantic(
+    parts: &[FlatPart],
+    connector: Option<String>,
+    ctx: &Context,
+) -> PrintItems {
+    let mut items = PrintItems::new();
+    items.extend(gen_expr(parts[0].expr, ctx));
+    if let Some(op) = connector.as_ref() {
+        items.push_string(" ".into());
+        items.push_string(op.clone());
+    }
+    items.push_signal(Signal::NewLine);
+    // `and not` is flattened into a single `not` operand; with the `and` moved
+    // to the semantic line, the `not` still has to lead the rest.
+    if let Some(op) = parts[1].op.as_ref() {
+        if connector.as_ref() != Some(op) {
+            items.push_string(op.clone());
+            items.push_string(" ".into());
+        }
+    }
+    items.extend(gen_expr(parts[1].expr, ctx));
     items
 }
 
@@ -1212,7 +1278,31 @@ mod tests {
     fn semantic_search_rad_with_and() {
         assert_eq!(
             format("RAD=(CN101850473B) AND tiab=(发动机)"),
-            "    RAD = (CN101850473B)\nand tiab = (发动机)\n"
+            "RAD = (CN101850473B) and\ntiab = (发动机)\n"
+        );
+    }
+
+    #[test]
+    fn semantic_search_at_start_keeps_and_on_its_line() {
+        assert_eq!(
+            format("R=(x) and ti=(y) and ab=(z)"),
+            "R = (x) and\n(\n        ti = (y)\n    and ab = (z)\n)\n"
+        );
+    }
+
+    #[test]
+    fn semantic_search_at_end_keeps_and_on_rest_line() {
+        assert_eq!(
+            format("ti=(y) and ab=(z) and R=(x)"),
+            "(\n        ti = (y)\n    and ab = (z)\n)\nand R = (x)\n"
+        );
+    }
+
+    #[test]
+    fn semantic_search_at_start_before_not_keeps_and() {
+        assert_eq!(
+            format("R=(x) and not ti=(y)"),
+            "R = (x) and\nnot ti = (y)\n"
         );
     }
 

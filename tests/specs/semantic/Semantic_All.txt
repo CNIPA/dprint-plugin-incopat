@@ -21,11 +21,38 @@ RPD = (CN101850473B)
 RAD=(CN101850473B) AND tiab=(发动机)
 
 [expect]
-    RAD = (CN101850473B)
-and tiab = (发动机)
+RAD = (CN101850473B) and
+tiab = (发动机)
 
 == should format lowercase semantic keyword to uppercase ==
 r=(CN101850473B)
 
 [expect]
 R = (CN101850473B)
+
+== should keep a free-text value intact ==
+R = (一种压缩与吸收混合式制冷系统，包括机械压缩制冷系统和吸收式制冷系统，能够利用机械压缩制冷系统中冷凝器产生的废热给吸收式制冷系统的发生器提供热量。)
+
+[expect]
+R = (一种压缩与吸收混合式制冷系统，包括机械压缩制冷系统和吸收式制冷系统，能够利用机械压缩制冷系统中冷凝器产生的废热给吸收式制冷系统的发生器提供热量。)
+
+== should never insert operators into a free-text value ==
+RAD = (一种压缩系统 包括压缩机，含 "quoted text" 与 and 字样)
+
+[expect]
+RAD = (一种压缩系统 包括压缩机，含 "quoted text" 与 and 字样)
+
+== should keep pipe separated values ==
+R=(CN101850473B|CN1872361B|引擎)
+
+[expect]
+R = (CN101850473B|CN1872361B|引擎)
+
+== should fold a multi-line value into one line ==
+R = (
+        一种压缩与吸收混合式制冷系统，
+        包括机械压缩制冷系统
+)
+
+[expect]
+R = (一种压缩与吸收混合式制冷系统， 包括机械压缩制冷系统)

@@ -257,7 +257,7 @@ impl<'a> Lexer<'a> {
         self.pos += 1;
 
         while let Some(&(_, ch)) = self.chars.get(self.pos) {
-            if is_word_continue(ch) {
+            if is_word_body(ch) {
                 self.pos += 1;
             } else {
                 break;
@@ -324,35 +324,18 @@ fn is_word_start(ch: char) -> bool {
         || is_cjk_or_extended(ch)
 }
 
-/// Characters that can continue a "word".
-fn is_word_continue(ch: char) -> bool {
-    ch.is_ascii_alphanumeric()
-        || ch == '_'
-        || ch == '*'
-        || ch == '?'
-        || ch == '$' // wildcard: 0 or 1 char (incoPat uses $ instead of #)
-        || ch == '.'
-        || ch == '/'
-        || ch == '-'
-        || is_special_char(ch)
-        || is_name_dot(ch)
-        || is_cjk_or_extended(ch)
-}
-
-/// The Unicode "middle dot" family. These characters glue the two halves of a
-/// single keyword together — foreign personal names like `罗宾·朗格巴赫` or
-/// `R·兰格巴赫`. They must stay inside the term: if the lexer split there, the
-/// parser would insert an implicit `and` and silently rewrite the name into
-/// `罗宾 and ·朗格巴赫`.
-fn is_name_dot(ch: char) -> bool {
-    matches!(ch,
-        '\u{00B7}' // · MIDDLE DOT
-        | '\u{2022}' // • BULLET
-        | '\u{2027}' // ‧ HYPHENATION POINT
-        | '\u{2219}' // ∙ BULLET OPERATOR
-        | '\u{22C5}' // ⋅ DOT OPERATOR
-        | '\u{FF65}' // ･ HALFWIDTH KATAKANA MIDDLE DOT
-    )
+/// Characters that continue a word.
+///
+/// A term is separated from its neighbour by whitespace or by a structural
+/// character of the syntax, never by punctuation glued to the term itself —
+/// `压缩机,包括` / `C++` / `AT&T` / `罗宾·朗格巴赫` stay one keyword. Splitting
+/// there would make the parser insert an implicit `and` in the middle of the
+/// term.
+///
+/// `@` is the exception: it introduces `TREE@`, so it ends the word and the
+/// `TREE` check in `read_word` consumes it.
+fn is_word_body(ch: char) -> bool {
+    is_keyword_continue(ch) && ch != '@'
 }
 
 /// Characters that can continue a keyword (non-word-start chars like CJK etc.)
@@ -364,7 +347,8 @@ fn is_keyword_continue(ch: char) -> bool {
     && ch != '#' // # at start of a new token is a comment
 }
 
-/// Check if a character is CJK or other extended Unicode that can appear in keywords.
+/// Check if a character is CJK or other extended Unicode that can appear in
+/// keywords.
 fn is_cjk_or_extended(ch: char) -> bool {
     matches!(ch,
         '\u{4E00}'..='\u{9FFF}'   // CJK Unified Ideographs
@@ -374,13 +358,6 @@ fn is_cjk_or_extended(ch: char) -> bool {
         | '\u{3040}'..='\u{309F}' // Hiragana
         | '\u{30A0}'..='\u{30FF}' // Katakana
         | '\u{AC00}'..='\u{D7AF}' // Hangul Syllables
-    )
-}
-
-/// Special characters supported by incoPat as part of keywords.
-fn is_special_char(ch: char) -> bool {
-    matches!(ch,
-        '℃' | '℉' | '%' | '±' | '°' | '™' | '®'
     )
 }
 
@@ -822,6 +799,59 @@ mod tests {
                 dot as u32
             );
         }
+    }
+
+    #[test]
+    fn wide_punctuation_stays_inside_keyword() {
+        // 全角标点是中文关键词的一部分,不能在这里断开并插入隐式 and
+        for punct in [
+            '，', '。', '；', '：', '、', '！', '？', '（', '）', '“', '”', '—', '…',
+        ] {
+            let input = format!("R=(一种系统{}包括压缩机)", punct);
+            let expected_keyword = format!("一种系统{}包括压缩机", punct);
+            assert_eq!(
+                lex(&input),
+                vec![
+                    (SemanticKeyword, "R"),
+                    (Equals, "="),
+                    (LParen, "("),
+                    (Keyword, expected_keyword.as_str()),
+                    (RParen, ")"),
+                ],
+                "wide punctuation U+{:04X} split the keyword",
+                punct as u32
+            );
+        }
+    }
+
+    #[test]
+    fn punctuation_glued_to_term_stays_inside_keyword() {
+        // 紧贴检索词的标点属于这个词,只有空白和语法符号才分隔检索词
+        assert_eq!(lex("a,b"), vec![(Keyword, "a,b")]);
+        assert_eq!(lex("C++"), vec![(Keyword, "C++")]);
+        assert_eq!(lex("AT&T"), vec![(Keyword, "AT&T")]);
+        assert_eq!(
+            lex("ti=(一种系统,包括压缩机)"),
+            vec![
+                (FieldCode, "ti"),
+                (Equals, "="),
+                (LParen, "("),
+                (Keyword, "一种系统,包括压缩机"),
+                (RParen, ")"),
+            ]
+        );
+        // TREE@ 仍然单独成词
+        assert_eq!(
+            lex("ap=(TREE@\"清华大学\")"),
+            vec![
+                (FieldCode, "ap"),
+                (Equals, "="),
+                (LParen, "("),
+                (TreeAt, "TREE@"),
+                (QuotedString, "\"清华大学\""),
+                (RParen, ")"),
+            ]
+        );
     }
 
     #[test]
